@@ -1336,8 +1336,8 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                         style={{
                           left: `calc(100% + ${12 / (canvasZoom / 100)}px)`,
                           top: 0,
-                          width: `${800 / (canvasZoom / 100)}px`,
-                          height: `${600 / (canvasZoom / 100)}px`,
+                          width: `${1600 / (canvasZoom / 100)}px`,
+                          height: `${1200 / (canvasZoom / 100)}px`,
                           border: 'none',
                         }}
                         onPointerDown={(e) => e.stopPropagation()}

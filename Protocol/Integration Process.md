@@ -33,9 +33,11 @@
 
 1.  **Image Upload Event**: 사용자가 .jpg, .png 등 건축물 이미지를 업로드.
 2.  **State Reset**: 기존의 생성된 이미지(generatedImage) 및 배치도(sitePlanImage)를 초기화(Null)하고 UI를 갱신.
-3.  **Basic Viewpoint Analysis (분석 시작)**: 
+3.  **Basic Viewpoint Analysis & 가이드라인 기반 분석 (분석 및 추출 동시 개시)**: 
     *   **Engine:** `gemini-3.1-pro-preview` (MODEL_ANALYSIS)
-    *   입력된 이미지의 "정면(06:00) 기준점" 대비 현재 관찰자의 시점 변수(Camera Angle, Altitude, Lens 설정)를 판단하여 상태(State) 값으로 업데이트.
+    *   **시점 추론:** 입력된 이미지의 "정면(06:00) 기준점" 대비 현재 관찰자의 시점 변수(Camera Angle, Altitude, Lens 설정)를 판단하여 상태(State) 값으로 업데이트.
+    *   **가이드라인 발동:** `ANALYZE` 기능 호출 즉시 `전개도작성 가이드라인`을 최초부터 적용하여, 5면 입면도 기반 데이터를 탐색 시작.
+    *   **AEPL 스키마 선제 도출:** 형태적 기하학(`1_Geometry_MASTER`)과 재질/광학적 속성(`2_Property_SLAVE`)을 1:1 앙상블 페어로 분석한 JSON 트리를 구성하고 브라우저 Developer Console에 강제 로깅함.
     *   옵션 패널(Right Sidebar)이 자동으로 열리며 분석 중 텍스트가 표시됨.
 
 ---
@@ -73,12 +75,9 @@
 > *   `2_Property_Data (Data Binder)`: 파라미터 기반 Text Prompt로만 작동. 확정된 기하학적 틀 내부에 치수와 광학 물성을 주입하며, Geometry 없이 단독 연산 불가.
 > *   **`ensemble_pair`가 성립된 상태(Geometry + Property)에서만 렌더링 실행 허가.**
 
-3.  **Elevation Parameter Extraction (히든 연산) 및 가이드라인 발동**:
-    *   **Engine:** `gemini-3.1-pro-preview` (Phase 1과 동시 연산 처리됨)
-    *   **가이드라인 기반 실행**: `ANALYZE` 발동 시 `전개도작성 가이드라인` 규칙을 적용하여 5면 입면도 및 정사영 평면도 작성을 개시.
-    *   형태 기하학(`1_Geometry_MASTER`)과 재질 광학 속성(`2_Property_SLAVE`)을 1:1 앙상블 페어로 분석하여 JSON 트리를 구성.
-    *   해당 데이터는 즉시 불변의 기준값(Constant Reference)으로 기록됨과 동시에, 개발자의 무결성 검증을 위해 브라우저 Console(Developer Log)으로 추출 출력됨.
-    *   **AEPL 핸드오버 포맷**: 확정 형태(ControlNet용)와 속성(Text Prompt용)이 패키징되어 Protocol B로 전달됨.
+3.  **Elevation Parameter Binding (상태 고정 및 인수인계 준비)**:
+    *   Phase 1에서 미리 발동한 `전개도작성 가이드라인` 연산을 통해 도출된 `1_Geometry_MASTER` 및 `2_Property_SLAVE` JSON 결과값(AEPL 스키마)을 시스템 내 불변의 기준값(Constant Reference)으로 영구 바인딩.
+    *   **AEPL 핸드오버 포맷**: 확정 형태(ControlNet 단방향 가이드)와 속성(Text Prompt 단방향 지시) 데이터가 완벽히 패키징되어, 백엔드/프로토콜 B 시각화 단계로 최종 전달될 준비를 완료.
 
 4.  **Contextual Image Synthesis (입면 합성 및 보정)**:
     *   **Target:** `Original Input Image` + `elevationParams`
