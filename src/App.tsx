@@ -695,7 +695,32 @@ export default function App() {
     try {
       // Phase 1 & 2: Structural & Viewpoint Analysis using gemini-3.1-pro-preview
       const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-      
+
+      // [V10] Image Pre-Processing: Regenerate image via AI for better internal interpretation
+      // (Proposal 3: regenerated image used internally only, canvas still shows original)
+      let analysisImageBase64 = base64Image; // fallback to original
+      try {
+        const regenBase64Data = base64Image.split(',')[1];
+        const regenMimeType = base64Image.split(';')[0].split(':')[1];
+        const regenResult = await ai.models.generateContent({
+          model: IMAGE_GEN,
+          contents: {
+            parts: [
+              { inlineData: { data: regenBase64Data, mimeType: regenMimeType } },
+              { text: 'Reproduce this architectural image exactly as-is. Output a pixel-perfect copy with identical composition, lighting, materials, and geometry. No modifications.' },
+            ],
+          },
+        });
+        const regenParts = regenResult.candidates?.[0]?.content?.parts || [];
+        const regenImagePart = regenParts.find((p: any) => p.inlineData);
+        if (regenImagePart?.inlineData) {
+          analysisImageBase64 = `data:${regenImagePart.inlineData.mimeType};base64,${regenImagePart.inlineData.data}`;
+          console.log('%c[V10] Image Pre-Processing complete. Using regenerated image for analysis.', 'color: #7c3aed; font-weight: bold;');
+        }
+      } catch (regenErr) {
+        console.warn('[V10] Image Pre-Processing failed, using original:', regenErr);
+      }
+
       const analysisPrompt = `
         You are a Deterministic BIM Compiler. Analyze this architectural image.
 
@@ -798,12 +823,18 @@ export default function App() {
                 "B-5_Aging_Weathering": { "Weathering_State": "" }
               }
             }
+          },
+          "bldg_ratio": {
+            "width": 10,
+            "depth": 8,
+            "height": 15
           }
         }
       `;
 
-      const base64Data = base64Image.split(',')[1];
-      const mimeType = base64Image.split(';')[0].split(':')[1];
+      // Use regenerated image (V10) for analysis if available, fallback to original
+      const base64Data = analysisImageBase64.split(',')[1];
+      const mimeType = analysisImageBase64.split(';')[0].split(':')[1];
 
       const runAnalysis = async (modelName: string) => {
         const result = await ai.models.generateContent({
@@ -878,6 +909,7 @@ export default function App() {
           timeIndex: Number(data.time_index) || 2,
           analyzedOpticalParams: analyzedOpt,
           elevationParams: data.elevation_parameters || null,
+          bldgRatio: data.bldg_ratio || null,  // [V11] numeric proportions for artboard grid
           sitePlanImage: null,
           architecturalSheetImage: null
         };
@@ -915,7 +947,29 @@ export default function App() {
     // For this simulation, we'll use the same API structure but with a specific site-plan prompt.
     try {
       const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-      const contextualParamsStr = extractedParams ? JSON.stringify(extractedParams) : "Utilize implicit building context";
+
+      // [V10 Method A] Structured AEPL injection — natural language format for PHASE 2
+      const buildStructuredParams = (params: any): string => {
+        if (!params) return 'Utilize implicit building context from the uploaded image.';
+        const views = ['Front', 'Top', 'Rear', 'Left', 'Right'];
+        const lines: string[] = ['[AEPL Structured Parameters from PHASE 1 Analysis]'];
+        for (const view of views) {
+          const v = params[view];
+          if (!v) continue;
+          const g = v['1_Geometry_MASTER'];
+          const p = v['2_Property_SLAVE'];
+          lines.push(`
+[${view} Elevation]`);
+          if (g) {
+            lines.push(`  Geometry: Scale=${g['A-1_Bounding_Proportions']?.Scale_X_Z ?? '-'}, Grid=${g['A-2_Structural_Grid']?.Grid_Module ?? '-'}, Depth=${g['A-3_Depth_Extrusions']?.Extrusion_Z ?? '-'}, Voids=${g['A-4_Voids_Openings']?.Punching_Ratio ?? '-'}, Roof=${g['A-5_Specific_Features']?.Roof_and_Base ?? '-'}`);
+          }
+          if (p) {
+            lines.push(`  Material: ${p['B-1_Primary_Materiality']?.Base_Color ?? '-'} | Glazing: ${p['B-2_Optical_Glazing']?.Glass_Type ?? '-'} | Shadow: ${p['B-4_Illumination_Shadows']?.Shadow_Intensity ?? '-'}`);
+          }
+        }
+        return lines.join('\n');
+      };
+      const contextualParamsStr = buildStructuredParams(extractedParams);
 
       const sitePlanPrompt = `
         [Architectural Multi-View Reference Sheet - System Protocol B Node 3 & 4]
@@ -924,7 +978,12 @@ export default function App() {
         
         [CONTEXTUAL IMAGE SYNTHESIS]
         - Clone and PRESERVE the exact textures, materials, and architectural geometry of the visible facades from the uploaded original image (Source of Truth).
-        - SYNTHESIZE the blind spots (Rear, unseen sides) logically, matching the established context and the following extracted parameters: ${contextualParamsStr}
+        - SYNTHESIZE the blind spots (Rear, unseen sides) logically, matching the established context and the following extracted parameters:
+${contextualParamsStr}
+
+        [V10 Method C] SOURCE IMAGE VIEWPOINT:
+        - The uploaded image was captured from: Angle ${analyzedOpticalParams?.angle ?? 'Unknown'} | Altitude ${analyzedOpticalParams?.altitude ?? 'Unknown'} | Lens ${analyzedOpticalParams?.lens ?? 'Unknown'}
+        - Use this to understand which facade is visible in the source and infer all other hidden facades accordingly.
         - The result must be a holistic pixel-level generation combining Known (Source Image) + Unknown (AI Inferred Constraints).
         
         [ORIENTATION RULE]
@@ -965,36 +1024,45 @@ export default function App() {
             const fullSheetData = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
             setArchitecturalSheetImage(fullSheetData);
             
-            // Extract TOP VIEW from the 3x3 cross layout grid
+            // [V11] Extract all 5 views from the 3x3 cross layout and store independently
+            // Layout: Row0=[_,REAR,_], Row1=[LEFT,TOP,RIGHT], Row2=[_,FRONT,_]
             const img = new Image();
             img.onload = () => {
-              const canvas = document.createElement('canvas');
               const cellW = img.width / 3;
               const cellH = img.height / 3;
-              canvas.width = cellW;
-              canvas.height = cellH;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                // TOP View is now at Row 1 (center row), Col 1 (new layout: REAR/TOP+LEFT+RIGHT/FRONT)
-                ctx.drawImage(img, cellW, cellH, cellW, cellH, 0, 0, cellW, cellH);
-                const generatedSitePlan = canvas.toDataURL();
-                setSitePlanImage(generatedSitePlan);
 
-                if (itemId) {
-                  setCanvasItems(prev => prev.map(item => {
-                    if (item.id === itemId && item.parameters) {
-                      return {
-                        ...item,
-                        parameters: {
-                          ...item.parameters,
-                          architecturalSheetImage: fullSheetData,
-                          sitePlanImage: generatedSitePlan
-                        }
-                      };
-                    }
-                    return item;
-                  }));
-                }
+              const cropCell = (col: number, row: number): string => {
+                const c = document.createElement('canvas');
+                c.width = cellW; c.height = cellH;
+                const cx = c.getContext('2d');
+                if (cx) cx.drawImage(img, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+                return c.toDataURL();
+              };
+
+              const rearImg   = cropCell(1, 0);
+              const leftImg   = cropCell(0, 1);
+              const topImg    = cropCell(1, 1);
+              const rightImg  = cropCell(2, 1);
+              const frontImg  = cropCell(1, 2);
+
+              setSitePlanImage(topImg);
+
+              if (itemId) {
+                setCanvasItems(prev => prev.map(item => {
+                  if (item.id === itemId && item.parameters) {
+                    return {
+                      ...item,
+                      parameters: {
+                        ...item.parameters,
+                        architecturalSheetImage: fullSheetData,
+                        sitePlanImage: topImg,
+                        elevationImages: { top: topImg, front: frontImg, rear: rearImg, left: leftImg, right: rightImg },
+                        bldgRatio: null // will be set below if available
+                      }
+                    };
+                  }
+                  return item;
+                }));
               }
             };
             img.src = fullSheetData;
@@ -1546,10 +1614,32 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                         <div className="flex w-full h-full">
                             {/* Left: Architectural Sheet (V82: Only sheet shown) */}
                             <div className="flex-1 flex w-full h-full border border-black/10 dark:border-white/10 rounded-xl overflow-hidden bg-black/5">
-                                {item.parameters?.architecturalSheetImage ? (
-                                    <div className="relative w-full h-full flex items-center justify-center p-4">
-                                      <img src={item.parameters.architecturalSheetImage} className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-screen" alt="Site Plan" />
+                              {/* [V11] 5-Panel Orthographic Grid Artboard */}
+                            {item.parameters?.elevationImages ? (() => {
+                              const ei = item.parameters.elevationImages as any;
+                              const r = (item.parameters as any).bldgRatio || { width: 10, depth: 7, height: 13 };
+                              const W = r.width, D = r.depth, H = r.height;
+                              return (
+                                <div style={{
+                                  width: '100%', height: '100%',
+                                  display: 'grid',
+                                  gridTemplateColumns: `${D}fr ${W}fr ${D}fr`,
+                                  gridTemplateRows: `${D}fr ${H}fr ${H}fr`,
+                                  gridTemplateAreas: `'. rear .' 'left top right' '. front .'`,
+                                  gap: 0
+                                }}>
+                                  {(['rear','left','top','right','front'] as const).map(view => (
+                                    <div key={view} style={{ gridArea: view, overflow: 'hidden' }}>
+                                      {ei[view] && <img src={ei[view]} style={{ width:'100%', height:'100%', objectFit:'fill', display:'block' }} alt={view} />}
                                     </div>
+                                  ))}
+                                </div>
+                              );
+                            })()
+                            : item.parameters?.architecturalSheetImage ? (
+                                <div className="relative w-full h-full flex items-center justify-center p-4">
+                                  <img src={item.parameters.architecturalSheetImage} className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-screen" alt="Site Plan" />
+                                </div>
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-center p-4">
                                       <p className="font-mono opacity-40 uppercase tracking-widest" style={{ fontSize: `${14 / (canvasZoom / 100)}px`}}>No Architectural Sheet Generated</p>

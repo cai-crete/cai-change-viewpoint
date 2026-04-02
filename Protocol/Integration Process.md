@@ -33,9 +33,14 @@
 
 1.  **Image Upload Event**: 사용자가 .jpg, .png 등 건축물 이미지를 업로드.
 2.  **State Reset**: 기존의 생성된 이미지(generatedImage) 및 배치도(sitePlanImage)를 초기화(Null)하고 UI를 갱신.
-3.  **Basic Viewpoint Analysis & 가이드라인 기반 분석 (분석 및 추출 동시 개시)**: 
+3.  **Image Pre-Processing — 이미지 재생성 (사용자 비노출)**: [분석] 버튼 클릭과 동시에 최초 수행.
+    *   **Engine:** `gemini-3.1-flash-image-preview`
+    *   **목적:** 업로드 원본의 JPEG 압축 노이즈, 렌즈 왜곡, 색보정 왜곡을 AI 정규화 거쳐 제거.
+    *   **출력:** 내부 변수 `analysisImageBase64` — 캔버스에는 원본 이미지 유지, 이후 PHASE 1 분석에만 내부 사용.
+    *   **실패 시:** Fallback으로 원본 이미지를 그대로 사용하며 분석 계속 진행.
+4.  **Basic Viewpoint Analysis & 가이드라인 기반 분석 (분석 및 추출 동시 개시)**: 
     *   **Engine:** `gemini-3.1-pro-preview` (MODEL_ANALYSIS)
-    *   **시점 추론:** 입력된 이미지의 "정면(06:00) 기준점" 대비 현재 관찰자의 시점 변수(Camera Angle, Altitude, Lens 설정)를 판단하여 상태(State) 값으로 업데이트.
+    *   **시점 추론:** 재생성된 이미지(`analysisImageBase64`)를 기반으로 "정면(06:00) 기준점" 대비 현재 관찰자의 시점 변수(Camera Angle, Altitude, Lens 설정)를 판단하여 상태(State) 값으로 업데이트.
     *   **가이드라인 발동:** `ANALYZE` 기능 호출 즉시 `전개도작성 가이드라인`을 최초부터 적용하여, 5면 입면도 기반 데이터를 탐색 시작.
     *   **AEPL 스키마 선제 도출:** 형태적 기하학(`1_Geometry_MASTER`)과 재질/광학적 속성(`2_Property_SLAVE`)을 1:1 앙상블 페어로 분석한 JSON 트리를 구성하고 브라우저 Developer Console에 강제 로깅함.
     *   옵션 패널(Right Sidebar)이 자동으로 열리며 분석 중 텍스트가 표시됨.

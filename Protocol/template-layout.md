@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>Image to Elevation - 5 Viewpoints (Cross Layout)</title>
+<title>Image to Elevation - 5 Viewpoints (Active Orthographic Layout)</title>
 
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,9 +11,14 @@
 
 <style>
   :root {
+    /* [SYSTEM INJECTION] Protocol A에서 추출된 건물의 절대 비례 파라미터 (기본값 세팅) */
+    --bldg-width: {{geometry_ratio_x}};   /* 예: 10 (정면 가로 길이) */
+    --bldg-depth: {{geometry_ratio_y}};   /* 예: 8  (측면 깊이) */
+    --bldg-height: {{geometry_ratio_z}};  /* 예: 15 (건물 전체 높이) */
+
     --bg-color: #121212;
     --text-primary: #FFFFFF;
-    --accent-color: #F4C430; /* LAYOUT.jpg의 메인 옐로우 컬러 참조 */
+    --accent-color: #F4C430; 
   }
 
   * { 
@@ -47,11 +52,13 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
   }
 
   .title-overlay {
     position: absolute;
-    top: -45px; 
+    top: -45px;
     left: 0px;
     font-family: 'Bebas Neue', cursive;
     font-size: 36px;
@@ -61,82 +68,75 @@
     letter-spacing: 2px;
   }
 
-  /* Single Image Wrapper */
-  .composite-wrapper {
-    flex: 1;
-    width: 100%;
-    height: 100%;
+  /* [CORE PATCH] 능동형 정사영 그리드 (Active Orthographic Grid) 
+    건축 제도 원칙에 따라 Front(정면)를 중앙에 배치하여 모든 Z축(높이) 라인을 강제 정렬합니다.
+  */
+  .cross-grid-container {
+    display: grid;
+    /* 열(X축): 좌측면(깊이) | 정면/평면/배면(가로) | 우측면(깊이) */
+    grid-template-columns: var(--bldg-depth) var(--bldg-width) var(--bldg-depth);
+    
+    /* 행(Y/Z축): 평면(깊이) | 좌측/정면/우측(높이) | 배면(높이) */
+    grid-template-rows: var(--bldg-depth) var(--bldg-height) var(--bldg-height);
+    
+    grid-template-areas:
+      ". top ."
+      "left front right"
+      ". rear .";
+    
+    gap: 16px;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: calc((var(--bldg-depth) * 2 + var(--bldg-width)) / (var(--bldg-depth) + var(--bldg-height) * 2));
+  }
+
+  .view-panel {
     position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
+    background-color: rgba(255, 255, 255, 0.03); 
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
   }
 
-  /* 렌더링된 단일 통합 십자형 이미지 (건축물 비례 능동 반응) */
-  .master-composite-img {
+  .top   { grid-area: top; }
+  .left  { grid-area: left; }
+  .front { grid-area: front; }
+  .right { grid-area: right; }
+  .rear  { grid-area: rear; }
+
+  .view-img {
     width: 100%;
     height: 100%;
-    object-fit: contain; /* 건축물 비례에 맞추어 유연하게 스케일링 */
-    position: absolute;
-    top: 0;
-    left: 0;
+    object-fit: fill; /* 뼈대 비율이 이미 완벽하므로 픽셀을 그리드에 1:1로 고정 */
     z-index: 1;
   }
 
-  /* CSS Grid를 활용한 십자(Cross) 레이아웃 오버레이 */
-  .visual-grid-overlay {
+  .label-overlay {
     position: absolute;
-    top: 0; 
+    bottom: 0;
     left: 0;
-    width: 100%; 
-    height: 100%;
-    display: grid;
-    /* 3x3 그리드 구성 (십자 형태) */
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: 1fr 1fr 1fr;
-    grid-template-areas:
-      ". rear ."
-      "left top right"
-      ". front .";
-    gap: 8px;
-    z-index: 2;
-  }
-
-  /* 라벨 공통 속성 */
-  .label-item {
+    width: 100%;
     display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: center;
-    pointer-events: none; 
+    justify-content: center;
+    z-index: 2;
+    pointer-events: none;
     user-select: none;
-    border: 1px solid rgba(255, 255, 255, 0.1); /* 영역 확인용 미세 가이드라인 */
   }
 
-  /* 레이아웃 에어리어 할당 */
-  .rear  { grid-area: rear; }
-  .left  { grid-area: left; }
-  .top   { grid-area: top; }
-  .right { grid-area: right; }
-  .front { grid-area: front; }
-
-  /* 빈 공간 처리 */
-  .empty {
-    visibility: hidden;
-  }
-
-  .label-item strong {
-    font-size: 16px;
-    font-weight: 500;
+  .label-overlay strong {
+    font-size: 14px;
+    font-weight: 600;
     color: var(--bg-color);
     background-color: var(--accent-color);
     width: 100%;
     text-align: center;
-    padding: 10px 0;
+    padding: 8px 0;
     margin: 0;
     text-transform: uppercase;
     letter-spacing: 1px;
-    opacity: 0.9;
+    opacity: 0.95;
   }
 </style>
 </head>
@@ -144,26 +144,36 @@
 
   <div class="layout-container">
     <div class="main-panel">
-      <h1 class="title-overlay">IMAGE TO ELEVATION: 5-VIEW ORTHOGRAPHIC</h1>
+      <h1 class="title-overlay">IMAGE TO ELEVATION: DETERMINISTIC ORTHOGRAPHIC</h1>
       
-      <div class="composite-wrapper">
-        <img src="{{img_url_5view_cross_composite}}" class="master-composite-img" alt="5-View Architectural Sheet">
+      <div class="cross-grid-container">
         
-        <div class="visual-grid-overlay">
-          <div class="label-item empty"></div>
-          <div class="label-item rear"><strong>REAR</strong></div>
-          <div class="label-item empty"></div>
-          
-          <div class="label-item left"><strong>LEFT</strong></div>
-          <div class="label-item top"><strong>TOP</strong></div>
-          <div class="label-item right"><strong>RIGHT</strong></div>
-          
-          <div class="label-item empty"></div>
-          <div class="label-item front"><strong>FRONT</strong></div>
-          <div class="label-item empty"></div>
+        <div class="view-panel top">
+          <img src="{{img_url_top}}" alt="Top View" class="view-img">
+          <div class="label-overlay"><strong>TOP (PLAN)</strong></div>
         </div>
-      </div>
 
+        <div class="view-panel left">
+          <img src="{{img_url_left}}" alt="Left View" class="view-img">
+          <div class="label-overlay"><strong>LEFT</strong></div>
+        </div>
+
+        <div class="view-panel front">
+          <img src="{{img_url_front}}" alt="Front View" class="view-img">
+          <div class="label-overlay"><strong>FRONT</strong></div>
+        </div>
+
+        <div class="view-panel right">
+          <img src="{{img_url_right}}" alt="Right View" class="view-img">
+          <div class="label-overlay"><strong>RIGHT</strong></div>
+        </div>
+
+        <div class="view-panel rear">
+          <img src="{{img_url_rear}}" alt="Rear View" class="view-img">
+          <div class="label-overlay"><strong>REAR</strong></div>
+        </div>
+
+      </div>
     </div>
   </div>
 
