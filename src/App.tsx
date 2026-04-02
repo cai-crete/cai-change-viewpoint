@@ -698,31 +698,106 @@ export default function App() {
       const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       
       const analysisPrompt = `
-        Analyze this architectural image.
-        [CRITICAL PRINCIPLE] Absolute geographical orientation is ignored. The building's main facade (front) is ALWAYS considered the relative "06:00" vector. 
-        Analyze the viewpoint based on this 06:00 anchoring.
-        
-        Return estimated parameters in JSON format:
+        You are a Deterministic BIM Compiler. Analyze this architectural image.
+
+        [GLOBAL DIRECTIVE]
+        - The building's main facade (front) is ALWAYS the relative "06:00" vector.
+        - Follow the '5면 정사영 전개도 건축물 정보 작성 가이드라인' exactly.
+        - For each of the 5 views (Front, Top, Right, Left, Rear), fill in BOTH Part A (Geometry) and Part B (Property) per the master template.
+        - Blind spots (Rear, sides) must be logically inferred from visible facade using Master-Priority Snapping.
+
+        Return ALL fields in JSON:
         {
-          "angle": "One of: 12:00, 1:30, 3:00, 04:30, 06:00 (Straight Front), 07:30, 09:00, 10:30",
-          "altitude_index": "0 to 7 (index of ALTITUDES constant)",
-          "lens_index": "0 to 7 (index of LENSES constant)",
-          "time_index": "0 to 7 (index of TIMES constant)",
-          "site_plan_hint": "Description of building footprint",
-          "elevation_parameters": {
-            "1_Geometry_MASTER": {
-              "A-1_Bounding_Proportions": "Scale_X_Z and Mass_Articulation",
-              "A-2_Structural_Grid": "Grid_Module and Wrap_Around_Rules",
-              "A-3_Depth_Extrusions": "Extrusion_Z and Setback_Z",
-              "A-4_Voids_Openings": "Punching_Ratio and Zoning_Align",
-              "A-5_Specific_Features": "Roof_&_Base"
+          "angle": "One of: 12:00, 1:30, 3:00, 04:30, 06:00, 07:30, 09:00, 10:30",
+          "altitude_index": "0-7",
+          "lens_index": "0-7",
+          "time_index": "0-7",
+          "site_plan_hint": "Building footprint description",
+          "elevation_views": {
+            "Front": {
+              "meta": { "Target_View": "Front", "Normal_Vector": "(0,-1,0)", "Dependency_Status": "MASTER" },
+              "1_Geometry_MASTER": {
+                "A-1_Bounding_Proportions": { "Scale_X_Z": "", "Mass_Articulation": "" },
+                "A-2_Structural_Grid": { "Grid_Module": "", "Wrap_Around_Rules": "N/A" },
+                "A-3_Depth_Extrusions": { "Extrusion_Z": "", "Setback_Z": "" },
+                "A-4_Voids_Openings": { "Punching_Ratio": "", "Zoning_Align": "N/A" },
+                "A-5_Specific_Features": { "Roof_and_Base": "" }
+              },
+              "2_Property_SLAVE": {
+                "B-1_Primary_Materiality": { "Base_Color": "", "PBR_Values": "", "Texture_Detail": "" },
+                "B-2_Optical_Glazing": { "Glass_Type": "", "Optical_Index": "" },
+                "B-3_Secondary_Elements": { "Frame_Material": "" },
+                "B-4_Illumination_Shadows": { "Shadow_Intensity": "", "Directional_Light": "" },
+                "B-5_Aging_Weathering": { "Weathering_State": "" }
+              }
             },
-            "2_Property_SLAVE": {
-              "B-1_Primary_Materiality": "Base_Color, PBR_Values, Texture_Detail",
-              "B-2_Optical_Glazing": "Glass_Type, Optical_Index",
-              "B-3_Secondary_Elements": "Frame_Material",
-              "B-4_Illumination_Shadows": "Shadow_Intensity, Directional_Light",
-              "B-5_Aging_Weathering": "Weathering_State"
+            "Top": {
+              "meta": { "Target_View": "Top", "Normal_Vector": "(0,0,1)", "Dependency_Status": "SLAVE" },
+              "1_Geometry_MASTER": {
+                "A-1_Bounding_Proportions": { "Scale_X_Z": "", "Mass_Articulation": "" },
+                "A-2_Structural_Grid": { "Grid_Module": "", "Wrap_Around_Rules": "" },
+                "A-3_Depth_Extrusions": { "Extrusion_Z": "N/A", "Setback_Z": "" },
+                "A-4_Voids_Openings": { "Punching_Ratio": "N/A", "Zoning_Align": "" },
+                "A-5_Specific_Features": { "Roof_and_Base": "" }
+              },
+              "2_Property_SLAVE": {
+                "B-1_Primary_Materiality": { "Base_Color": "", "PBR_Values": "", "Texture_Detail": "" },
+                "B-2_Optical_Glazing": { "Glass_Type": "N/A", "Optical_Index": "N/A" },
+                "B-3_Secondary_Elements": { "Frame_Material": "" },
+                "B-4_Illumination_Shadows": { "Shadow_Intensity": "", "Directional_Light": "" },
+                "B-5_Aging_Weathering": { "Weathering_State": "" }
+              }
+            },
+            "Right": {
+              "meta": { "Target_View": "Right", "Normal_Vector": "(1,0,0)", "Dependency_Status": "SLAVE" },
+              "1_Geometry_MASTER": {
+                "A-1_Bounding_Proportions": { "Scale_X_Z": "", "Mass_Articulation": "" },
+                "A-2_Structural_Grid": { "Grid_Module": "", "Wrap_Around_Rules": "" },
+                "A-3_Depth_Extrusions": { "Extrusion_Z": "", "Setback_Z": "" },
+                "A-4_Voids_Openings": { "Punching_Ratio": "", "Zoning_Align": "" },
+                "A-5_Specific_Features": { "Roof_and_Base": "" }
+              },
+              "2_Property_SLAVE": {
+                "B-1_Primary_Materiality": { "Base_Color": "", "PBR_Values": "", "Texture_Detail": "" },
+                "B-2_Optical_Glazing": { "Glass_Type": "", "Optical_Index": "" },
+                "B-3_Secondary_Elements": { "Frame_Material": "" },
+                "B-4_Illumination_Shadows": { "Shadow_Intensity": "", "Directional_Light": "" },
+                "B-5_Aging_Weathering": { "Weathering_State": "" }
+              }
+            },
+            "Left": {
+              "meta": { "Target_View": "Left", "Normal_Vector": "(-1,0,0)", "Dependency_Status": "SLAVE" },
+              "1_Geometry_MASTER": {
+                "A-1_Bounding_Proportions": { "Scale_X_Z": "", "Mass_Articulation": "" },
+                "A-2_Structural_Grid": { "Grid_Module": "", "Wrap_Around_Rules": "" },
+                "A-3_Depth_Extrusions": { "Extrusion_Z": "", "Setback_Z": "" },
+                "A-4_Voids_Openings": { "Punching_Ratio": "", "Zoning_Align": "" },
+                "A-5_Specific_Features": { "Roof_and_Base": "" }
+              },
+              "2_Property_SLAVE": {
+                "B-1_Primary_Materiality": { "Base_Color": "", "PBR_Values": "", "Texture_Detail": "" },
+                "B-2_Optical_Glazing": { "Glass_Type": "", "Optical_Index": "" },
+                "B-3_Secondary_Elements": { "Frame_Material": "" },
+                "B-4_Illumination_Shadows": { "Shadow_Intensity": "", "Directional_Light": "" },
+                "B-5_Aging_Weathering": { "Weathering_State": "" }
+              }
+            },
+            "Rear": {
+              "meta": { "Target_View": "Rear", "Normal_Vector": "(0,1,0)", "Dependency_Status": "SLAVE" },
+              "1_Geometry_MASTER": {
+                "A-1_Bounding_Proportions": { "Scale_X_Z": "", "Mass_Articulation": "" },
+                "A-2_Structural_Grid": { "Grid_Module": "", "Wrap_Around_Rules": "" },
+                "A-3_Depth_Extrusions": { "Extrusion_Z": "N/A", "Setback_Z": "" },
+                "A-4_Voids_Openings": { "Punching_Ratio": "", "Zoning_Align": "" },
+                "A-5_Specific_Features": { "Roof_and_Base": "" }
+              },
+              "2_Property_SLAVE": {
+                "B-1_Primary_Materiality": { "Base_Color": "", "PBR_Values": "", "Texture_Detail": "" },
+                "B-2_Optical_Glazing": { "Glass_Type": "", "Optical_Index": "" },
+                "B-3_Secondary_Elements": { "Frame_Material": "" },
+                "B-4_Illumination_Shadows": { "Shadow_Intensity": "", "Directional_Light": "" },
+                "B-5_Aging_Weathering": { "Weathering_State": "" }
+              }
             }
           }
         }
@@ -748,15 +823,39 @@ export default function App() {
 
         const data = JSON.parse(jsonStr);
 
-        // [DEVELOPER INSPECTION] Output interpreted AEPL schema to console
-        console.log("%c=======================================================", "color: #1d4ed8; font-weight: bold;");
-        console.log("%c[DEVELOPER LOG] C CHANGE VIEWPOINT - AEPL SCHEMA EXTRACTED", "color: #1d4ed8; font-weight: bold; font-size: 14px;");
-        console.log("%c=======================================================", "color: #1d4ed8; font-weight: bold;");
-        console.log("%c[1_Geometry_MASTER] (Shape Anchor):", "color: #047857; font-weight: bold;");
-        console.dir(data.elevation_parameters?.["1_Geometry_MASTER"] || data.elevation_parameters?.["1_macro_geometry"], { depth: null });
-        console.log("%c[2_Property_SLAVE] (Data Binder):", "color: #b91c1c; font-weight: bold;");
-        console.dir(data.elevation_parameters?.["2_Property_SLAVE"] || data.elevation_parameters?.["3_material"], { depth: null });
-        console.log("%c=======================================================", "color: #1d4ed8; font-weight: bold;");
+        // [DEVELOPER INSPECTION] 5-View AEPL Schema per 전개도작성 가이드라인 §2 & §3
+        const views = data.elevation_views;
+        const VIEW_ORDER = ['Front', 'Top', 'Right', 'Left', 'Rear'];
+        const VIEW_COLORS: Record<string, string> = { Front: '#047857', Top: '#1d4ed8', Right: '#7c3aed', Left: '#b45309', Rear: '#b91c1c' };
+        const VIEW_VECTORS: Record<string, string> = { Front: '(0,-1,0)', Top: '(0,0,1)', Right: '(1,0,0)', Left: '(-1,0,0)', Rear: '(0,1,0)' };
+
+        console.log('%c========================================================', 'color: #1d4ed8; font-weight: bold;');
+        console.log('%c[DEVELOPER LOG] C CHANGE VIEWPOINT — AEPL 5-VIEW SCHEMA', 'color: #1d4ed8; font-weight: bold; font-size: 14px;');
+        console.log('%c[Reference: 전개도작성 가이드라인 §2 View Sequence Standards + §3 Elevation Parameter Schema]', 'color: #1d4ed8;');
+        console.log('%c========================================================', 'color: #1d4ed8; font-weight: bold;');
+
+        // Soft Gate: check all 5 views present
+        const missingViews = VIEW_ORDER.filter(v => !views?.[v]);
+        if (missingViews.length > 0) {
+          console.warn(`%c[SOFT GATE WARNING] Missing views: ${missingViews.join(', ')}. Proceeding to PHASE 2 with available data.`, 'color: #d97706; font-weight: bold;');
+        } else {
+          console.log('%c[GATE ✓] All 5 views present — Proceeding to PHASE 2.', 'color: #047857; font-weight: bold;');
+        }
+
+        VIEW_ORDER.forEach(viewKey => {
+          const v = views?.[viewKey];
+          if (!v) { console.warn(`[${viewKey}] Not present in response.`); return; }
+          const col = VIEW_COLORS[viewKey];
+          const vec = VIEW_VECTORS[viewKey];
+          console.groupCollapsed(`%c▶ ${viewKey} Elevation  |  Normal: ${vec}  |  Status: ${v.meta?.Dependency_Status ?? '-'}`, `color: ${col}; font-weight: bold;`);
+          console.log('%c  [Part A] 1_Geometry_MASTER (Shape Anchor):', `color: ${col}; font-weight: bold;`);
+          console.dir(v['1_Geometry_MASTER'], { depth: null });
+          console.log('%c  [Part B] 2_Property_SLAVE (Data Binder):', `color: ${col}; font-weight: bold;`);
+          console.dir(v['2_Property_SLAVE'], { depth: null });
+          console.groupEnd();
+        });
+
+        console.log('%c========================================================', 'color: #1d4ed8; font-weight: bold;');
 
         const aIdx = ANGLES.indexOf(data.angle);
         if (aIdx !== -1) setAngleIndex(aIdx);
@@ -789,7 +888,9 @@ export default function App() {
         ));
         
         // After parameter analysis, trigger site plan generation with extracted params for synthesis
-        await generateSitePlan(base64Image, data.elevation_parameters, itemId);
+        // Forward the entire elevation_views as the structured elevation parameters
+        const elevForPhase2 = data.elevation_views || data.elevation_parameters || null;
+        await generateSitePlan(base64Image, elevForPhase2, itemId);
         return true;
       };
 
