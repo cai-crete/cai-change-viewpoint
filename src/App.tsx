@@ -754,7 +754,7 @@ export default function App() {
     // Note: In a real app, this would call an AI model to generate a top-down view.
     // For this simulation, we'll use the same API structure but with a specific site-plan prompt.
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       const contextualParamsStr = extractedParams ? JSON.stringify(extractedParams) : "Utilize implicit building context";
 
       const sitePlanPrompt = `
