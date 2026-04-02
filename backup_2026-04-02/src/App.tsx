@@ -646,20 +646,35 @@ export default function App() {
           "time_index": "0 to 7 (index of TIMES constant)",
           "site_plan_hint": "Description of building footprint",
           "elevation_parameters": {
-            "1_Geometry_MASTER": {
-              "A-1_Bounding_Proportions": "Scale_X_Z and Mass_Articulation",
-              "A-2_Structural_Grid": "Grid_Module and Wrap_Around_Rules",
-              "A-3_Depth_Extrusions": "Extrusion_Z and Setback_Z",
-              "A-4_Voids_Openings": "Punching_Ratio and Zoning_Align",
-              "A-5_Specific_Features": "Roof_&_Base"
+          "elevation_parameters": {
+            "1_macro_geometry": {
+              "mass_typology": "Enum: Single_Block / L_Shape / U_Shape / Stepped / Cantilevered",
+              "proportion_ratio": "String X:Y:Z",
+              "floor_count": "Integer",
+              "roof_form": "Enum: Flat / Pitched / Gable / Hip",
+              "core_typology": "Enum: Center_Core / Side_Core / Rear_Core / Split_Core",
+              "base_type": "Enum: Solid_Plinth / Piloti / Sunken"
             },
-            "2_Property_SLAVE": {
-              "B-1_Primary_Materiality": "Base_Color, PBR_Values, Texture_Detail",
-              "B-2_Optical_Glazing": "Glass_Type, Optical_Index",
-              "B-3_Secondary_Elements": "Frame_Material",
-              "B-4_Illumination_Shadows": "Shadow_Intensity, Directional_Light",
-              "B-5_Aging_Weathering": "Weathering_State"
+            "2_site_constraints": {
+              "context_type": "Enum: Type_A_Urban_Dense / Type_B_Open_Detached",
+              "blind_wall": "Boolean for Left/Right/Rear"
+            },
+            "3_material": {
+              "base_material_type": "Enum: Exposed_Concrete / Brick_Masonry / Metal_Panel / Glass_CurtainWall / etc",
+              "base_color_hex": "String hex code"
+            },
+            "4_fenestration": {
+              "fenestration_type": "Enum: Punched_Window / Ribbon_Window / Curtain_Wall / Storefront",
+              "window_to_wall_ratio": "Float 0.0~1.0"
+            },
+            "5_articulation": {
+              "has_balcony": true/false,
+              "has_vertical_fins": true/false
+            },
+            "6_mep_assets": {
+              "spawn_hvac_unit": true/false
             }
+          }
           }
         }
       `;
@@ -683,17 +698,6 @@ export default function App() {
         if (!jsonStr) throw new Error("No JSON returned from model");
 
         const data = JSON.parse(jsonStr);
-
-        // [DEVELOPER INSPECTION] Output interpreted AEPL schema to console
-        console.log("%c=======================================================", "color: #1d4ed8; font-weight: bold;");
-        console.log("%c[DEVELOPER LOG] C CHANGE VIEWPOINT - AEPL SCHEMA EXTRACTED", "color: #1d4ed8; font-weight: bold; font-size: 14px;");
-        console.log("%c=======================================================", "color: #1d4ed8; font-weight: bold;");
-        console.log("%c[1_Geometry_MASTER] (Shape Anchor):", "color: #047857; font-weight: bold;");
-        console.dir(data.elevation_parameters?.["1_Geometry_MASTER"] || data.elevation_parameters?.["1_macro_geometry"], { depth: null });
-        console.log("%c[2_Property_SLAVE] (Data Binder):", "color: #b91c1c; font-weight: bold;");
-        console.dir(data.elevation_parameters?.["2_Property_SLAVE"] || data.elevation_parameters?.["3_material"], { depth: null });
-        console.log("%c=======================================================", "color: #1d4ed8; font-weight: bold;");
-
         const aIdx = ANGLES.indexOf(data.angle);
         if (aIdx !== -1) setAngleIndex(aIdx);
         if (data.altitude_index !== undefined) setAltitudeIndex(Number(data.altitude_index));

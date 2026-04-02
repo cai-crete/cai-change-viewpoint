@@ -43,24 +43,24 @@
 ## **PHASE 2. ARCHITECTURAL INFERENCE (심층 설계 추론 및 파라미터화)**
 단순 시점 분석을 넘어 보이지 않는 면(Blind Spot)을 채우기 위한 백그라운드 프로세싱(Protocol A).
 
-> **[Protocol Engine 자동 발동 — `protocol-image to elevation-v6`]**
+> **[Protocol Engine 자동 발동 — `System Protocol Image to Elevation-v2.2`]**
 >
-> PHASE 2가 개시되는 순간, **`protocol-image to elevation-v6`** (Protocol A: Architectural Logic Engine)가 전체 실행 엔진으로 자동 발동됩니다.
+> PHASE 2가 개시되는 순간, **`System Protocol Image to Elevation-v2.2`** (Protocol A: Architectural Logic Engine)가 전체 실행 엔진으로 자동 발동됩니다.
 >
 > 이 프로토콜은 입력된 2D 이미지의 가시권 상수를 스캔하고, 내부 조닝(Zoning) 로직을 통해 비가시권 영역의 3D 절대 좌표 및 속성 데이터를 결정론적으로 역설계합니다. 형태(Geometry)와 속성(Property)의 1:1 매칭 원칙(ensemble_pair)에 따라 연산을 분리하여 AI Hallucination을 원천 차단합니다.
 >
 > **발동 흐름:**
-> `PHASE 1 분석 완료` → `Protocol A 초기화` → `Phase 1: Macro Context & Global Datum Lock-on` → `Phase 2: Meso-Macro Geometry & Boundary Parameterization` → `Phase 3: Meso-Micro Zoning & Master-Priority Voids` → `Phase 4: Micro Properties & One-Way Specification (AEPL JSON 패키징)` → `Protocol B 이관`
+> `PHASE 1 분석 완료` → `Protocol A 초기화` → `Phase 1: Visual Diagnosis & Element Extraction` → `Phase 2: Context Inference & Zoning` → `Phase 3: Blind Spot Reconstruction` → `Phase 4: Design Specification Output (AEPL JSON 패키징)` → `Protocol B 이관`
 
-1.  **protocol-image to elevation-v6 연동**: 가시권 이미지에서 건축적 당위성을 역산하는 4단계 파이프라인 가동.
-    *   **Phase 1: Macro Context & Global Datum Lock-on** — 가시권 영역 정보 분석 및 기준선, 시방서 상수 동결.
-    *   **Phase 2: Meso-Macro Geometry & ...** — 3D 기하학 체적화 및 외피 시스템 파라미터화.
-    *   **Phase 3: Meso-Micro Zoning & ...** — 비가시권 개구부 요구사항 산출 및 가시권 그리드 최우선 강제 정렬.
-    *   **Phase 4: Micro Properties & One-Way Specification** — 단방향 마감재 타설 및 `1_Geometry_MASTER` / `2_Property_SLAVE` JSON 패키징.
+1.  **System Protocol Image to Elevation-v2.2 연동**: 가시권 이미지에서 건축적 당위성을 역산하는 4단계 파이프라인 가동.
+    *   **Phase 1: Visual Diagnosis & Element Extraction** — 가시권 진단 및 건축 요소(층고, 기둥 경간, PBR 물성, 창면적비) 추출, 대지 유형 판정.
+    *   **Phase 2: Context Inference & Zoning** — 내부 조닝 역산: 코어 좌표 동결, 주요 실공간 외벽 배분, 창면적비 입면 연동.
+    *   **Phase 3: Blind Spot Reconstruction** — 비가시권(배면/측면/지붕) 3D 기하학 입면을 대지 유형(Type A/B)에 따라 결정론적으로 재구성.
+    *   **Phase 4: Design Specification Output** — 모든 확정 데이터를 서술형 텍스트가 아닌 3D 좌표 기반 JSON 트리로 변환 후 AEPL 스키마로 패키징.
 
-> **[Protocol Reference 자동 연동 — `AEPS-v4` 및 `전개도작성 가이드라인`]**
+> **[Protocol Reference 자동 연동 — `Parameter Library` (AEPS-v4)]**
 >
-> `protocol-image to elevation-v6`의 Phase 4(Design Specification Output)가 완료되면, **`AEPS-v4`(Architectural Elevation Parameter System v4)** 와 **`전개도작성 가이드라인`** 이 자동으로 참조됩니다.
+> `System Protocol Image to Elevation-v2.2`의 Phase 4(Design Specification Output)가 완료되면, **`Parameter Library`(AEPS-v4: Architectural Elevation Parameter System v4)** 가 자동으로 참조됩니다.
 >
 > 이 프로토콜은 추출된 건축 요소를 `ensemble_pair` 원칙에 따라 형태(Geometry)와 속성(Property)의 상호보완적 이분화 기준을 정의하는 **시스템 헌법(Constitution)** 으로 작동합니다. Protocol A의 최종 산출물인 `1_Geometry_Data_MASTER` + `2_Property_Data_SLAVE` 패키징의 규격이 이 프로토콜에서 확정됩니다.
 >
@@ -73,12 +73,11 @@
 > *   `2_Property_Data (Data Binder)`: 파라미터 기반 Text Prompt로만 작동. 확정된 기하학적 틀 내부에 치수와 광학 물성을 주입하며, Geometry 없이 단독 연산 불가.
 > *   **`ensemble_pair`가 성립된 상태(Geometry + Property)에서만 렌더링 실행 허가.**
 
-3.  **Elevation Parameter Extraction (히든 연산) 및 가이드라인 발동**:
+3.  **Elevation Parameter Extraction (히든 연산)**:
     *   **Engine:** `gemini-3.1-pro-preview` (Phase 1과 동시 연산 처리됨)
-    *   **가이드라인 기반 실행**: `ANALYZE` 발동 시 `전개도작성 가이드라인` 규칙을 적용하여 5면 입면도 및 정사영 평면도 작성을 개시.
-    *   형태 기하학(`1_Geometry_MASTER`)과 재질 광학 속성(`2_Property_SLAVE`)을 1:1 앙상블 페어로 분석하여 JSON 트리를 구성.
-    *   해당 데이터는 즉시 불변의 기준값(Constant Reference)으로 기록됨과 동시에, 개발자의 무결성 검증을 위해 브라우저 Console(Developer Log)으로 추출 출력됨.
-    *   **AEPL 핸드오버 포맷**: 확정 형태(ControlNet용)와 속성(Text Prompt용)이 패키징되어 Protocol B로 전달됨.
+    *   건축물의 매스 타입(Mass Typology), 코어 형태(Core Typology), 주요 마감재(Base Material), 창호 종류(Fenestration), 돌출부 여부(Balcony 등)을 자동으로 분석하여 JSON 트리 구성.
+    *   해당 데이터는 추출 즉시 불변의 기준값(Constant Reference)인 `analyzedOpticalParams` 및 `elevationParams` 상태 변수에 고정 기록됨.
+    *   **AEPL 핸드오버 포맷**: Protocol A의 최종 산출물은 `1_Geometry_Data_MASTER`(형태 확정자, ControlNet Image Prompt로 변환)와 `2_Property_Data_SLAVE`(정보 귀속자, Text Prompt로 변환)로 패키징되어 Protocol B에 전달됨.
 
 4.  **Contextual Image Synthesis (입면 합성 및 보정)**:
     *   **Target:** `Original Input Image` + `elevationParams`
