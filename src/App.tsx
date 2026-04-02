@@ -161,6 +161,44 @@ const SitePlanDiagram = ({ angle, lens, sitePlanImage, isAnalyzing }: { angle: s
   );
 };
 
+// --- IndexedDB Persistence Utilities ---
+const DB_NAME = 'cai-canvas-db';
+const DB_VERSION = 1;
+const STORE_CANVAS = 'canvasState';
+const STATE_KEY = 'current';
+
+const openDB = (): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE_CANVAS);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+const dbSave = async (data: any) => {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_CANVAS, 'readwrite');
+    tx.objectStore(STORE_CANVAS).put(data, STATE_KEY);
+    await new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
+    db.close();
+  } catch (e) { console.warn('[IndexedDB] Save failed:', e); }
+};
+
+const dbLoad = async (): Promise<any> => {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_CANVAS, 'readonly');
+    const result = await new Promise<any>((res, rej) => {
+      const req = tx.objectStore(STORE_CANVAS).get(STATE_KEY);
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+    db.close();
+    return result;
+  } catch (e) { console.warn('[IndexedDB] Load failed:', e); return null; }
+};
+
 interface CanvasItem {
   id: string;
   type: 'upload' | 'generated';
@@ -303,6 +341,32 @@ export default function App() {
     window.addEventListener('resize', updateScale);
     return () => window.removeEventListener('resize', updateScale);
   }, []);
+
+  // --- IndexedDB Auto-Load on Mount ---
+  const [dbLoaded, setDbLoaded] = useState(false);
+  useEffect(() => {
+    dbLoad().then((saved) => {
+      if (saved) {
+        if (Array.isArray(saved.canvasItems)) setCanvasItems(saved.canvasItems);
+        if (typeof saved.canvasZoom === 'number') setCanvasZoom(saved.canvasZoom);
+        if (saved.canvasOffset) setCanvasOffset(saved.canvasOffset);
+        console.log('%c[IndexedDB] Canvas state restored successfully.', 'color: #047857; font-weight: bold;');
+      }
+      setDbLoaded(true);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- IndexedDB Auto-Save on Change ---
+  useEffect(() => {
+    if (!dbLoaded) return; // Don't save until initial load is done
+    const timer = setTimeout(() => {
+      dbSave({ canvasItems, canvasZoom, canvasOffset });
+      console.log('%c[IndexedDB] Canvas state auto-saved.', 'color: #1d4ed8;');
+    }, 800); // 800ms debounce
+    return () => clearTimeout(timer);
+  }, [canvasItems, canvasZoom, canvasOffset, dbLoaded]);
+
 
   useEffect(() => {
     if (theme === 'dark') {
