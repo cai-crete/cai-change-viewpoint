@@ -40,19 +40,18 @@ const determineScenario = (angleStr: string, altitude: number, lens: number) => 
 };
 
 // V70/V71: Map 5-IVSP Angle to 3x3 Cross Layout Slots
-// Cross Layout: Row0=[_,TOP,_], Row1=[LEFT,FRONT,RIGHT], Row2=[_,REAR,_]
-// Corner angles → composite: two adjacent faces injected together
+// NEW Cross Layout: Row0=[_,REAR,_], Row1=[LEFT,TOP,RIGHT], Row2=[_,FRONT,_]
 const getElevationSlot = (angle: string): { row: number; col: number; label: string }[] => {
-  if (angle === '06:00') return [{ row: 1, col: 1, label: 'FRONT' }];
-  if (angle === '12:00') return [{ row: 2, col: 1, label: 'REAR' }];
+  if (angle === '06:00') return [{ row: 2, col: 1, label: 'FRONT' }];
+  if (angle === '12:00') return [{ row: 0, col: 1, label: 'REAR' }];
   if (angle === '3:00')  return [{ row: 1, col: 2, label: 'RIGHT' }];
   if (angle === '09:00') return [{ row: 1, col: 0, label: 'LEFT' }];
   // Corner angles → composite (both adjacent faces)
-  if (angle === '1:30')  return [{ row: 2, col: 1, label: 'REAR' },  { row: 1, col: 2, label: 'RIGHT' }];
-  if (angle === '04:30') return [{ row: 1, col: 2, label: 'RIGHT' }, { row: 1, col: 1, label: 'FRONT' }];
-  if (angle === '07:30') return [{ row: 1, col: 1, label: 'FRONT' }, { row: 1, col: 0, label: 'LEFT' }];
-  if (angle === '10:30') return [{ row: 1, col: 0, label: 'LEFT' },  { row: 2, col: 1, label: 'REAR' }];
-  return [{ row: 1, col: 1, label: 'FRONT' }];
+  if (angle === '1:30')  return [{ row: 0, col: 1, label: 'REAR' },  { row: 1, col: 2, label: 'RIGHT' }];
+  if (angle === '04:30') return [{ row: 1, col: 2, label: 'RIGHT' }, { row: 2, col: 1, label: 'FRONT' }];
+  if (angle === '07:30') return [{ row: 2, col: 1, label: 'FRONT' }, { row: 1, col: 0, label: 'LEFT' }];
+  if (angle === '10:30') return [{ row: 1, col: 0, label: 'LEFT' },  { row: 0, col: 1, label: 'REAR' }];
+  return [{ row: 2, col: 1, label: 'FRONT' }];
 };
 
 // V70: Crop a single elevation cell from the 3x3 Cross Layout sheet
@@ -929,13 +928,15 @@ export default function App() {
         - The result must be a holistic pixel-level generation combining Known (Source Image) + Unknown (AI Inferred Constraints).
         
         [ORIENTATION RULE]
-        - Align the FRONT Elevation to face the BOTTOM of the image layout.
-        - The Top View (Roof Plan) must logically correlate with this "Front = Bottom" orientation.
+         LAYOUT SPECIFICATION (3x3 Grid):
+        - Row 1: [Empty | REAR Elevation | Empty]
+        - Row 2: [LEFT Elevation | TOP (Roof Plan) | RIGHT Elevation]
+        - Row 3: [Empty | FRONT Elevation | Empty]
         
-        LAYOUT SPECIFICATION (3x3 Grid):
-        - Row 1: [Empty | TOP (Roof Plan) | Empty]
-        - Row 2: [LEFT Elevation | FRONT Elevation | RIGHT Elevation]
-        - Row 3: [Empty | REAR Elevation | Empty]
+        [ORIENTATION RULE]
+        - FRONT Elevation is at the BOTTOM (Row 3) of the layout.
+        - REAR Elevation is at the TOP (Row 1).
+        - The TOP (Roof Plan) occupies the center (Row 2, middle column), flanked by LEFT and RIGHT.
         
         PROJECTION: True Orthographic (FOV=0), absolute zero perspective.
         STYLE: Realistic architectural elevation style matching the original rendering or photo's texture, NO perspective effects.
@@ -974,8 +975,8 @@ export default function App() {
               canvas.height = cellH;
               const ctx = canvas.getContext('2d');
               if (ctx) {
-                // TOP View is at Row 0, Col 1
-                ctx.drawImage(img, cellW, 0, cellW, cellH, 0, 0, cellW, cellH);
+                // TOP View is now at Row 1 (center row), Col 1 (new layout: REAR/TOP+LEFT+RIGHT/FRONT)
+                ctx.drawImage(img, cellW, cellH, cellW, cellH, 0, 0, cellW, cellH);
                 const generatedSitePlan = canvas.toDataURL();
                 setSitePlanImage(generatedSitePlan);
 
@@ -1499,10 +1500,10 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                       <div 
                         className={`absolute flex bg-white/90 dark:bg-[#1E1E1E]/90 backdrop-blur-xl shadow-xl rounded-2xl p-6 ${canvasMode === 'pan' ? 'pointer-events-none' : 'pointer-events-auto'}`}
                         style={{
-                          left: `calc(100% + ${12 / (canvasZoom / 100)}px)`,
+                          left: `calc(100% + 12px)`,
                           top: 0,
-                          width: `${1600 / (canvasZoom / 100)}px`,
-                          height: `${1200 / (canvasZoom / 100)}px`,
+                          width: `1600px`,
+                          height: `1200px`,
                           border: 'none',
                         }}
                         onPointerDown={(e) => e.stopPropagation()}
