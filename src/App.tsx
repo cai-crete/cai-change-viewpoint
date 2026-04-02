@@ -1062,23 +1062,58 @@ export default function App() {
 - Lens: ${currentLens.label}
 - Time of Day: ${currentTime}`;
 
-      // Layer C: PHASE 2 Property Slave Injection (elevationParams)
-      const layerC_property = elevationParams 
+      // [V9 FIX 1] Layer C: 5-View AEPL Property Injection (reads from new elevation_views format)
+      const getViewData = (viewKey: string) => {
+        if (!elevationParams) return null;
+        // Support both new (elevation_views) and legacy formats
+        return elevationParams[viewKey] || elevationParams;
+      };
+      const frontView = getViewData('Front');
+      const layerC_property = frontView
         ? `
-## Step 5: Structural & Material Parameters (PHASE 2 AEPL Data — Immutable)
-- Mass Typology: ${elevationParams.mass_typology || 'N/A'}
-- Core Typology: ${elevationParams.core_typology || 'N/A'}
-- Base Material: ${elevationParams.base_material || 'N/A'}
-- Fenestration: ${elevationParams.fenestration_type || 'N/A'}
-- Balcony/Projection: ${elevationParams.has_balcony || 'False'}`
+## Step 5: Structural & Material Parameters (PHASE 1 AEPL Data — Immutable)
+[Source: 5-View Elevation Schema / Front Elevation MASTER]
+- A-1 Bounding Proportions: ${frontView['1_Geometry_MASTER']?.['A-1_Bounding_Proportions']?.Scale_X_Z || frontView['1_Geometry_MASTER']?.['A-1_Bounding_Proportions'] || 'N/A'}
+- A-2 Structural Grid: ${frontView['1_Geometry_MASTER']?.['A-2_Structural_Grid']?.Grid_Module || 'N/A'}
+- A-3 Depth Extrusions: ${frontView['1_Geometry_MASTER']?.['A-3_Depth_Extrusions']?.Extrusion_Z || 'N/A'}
+- A-4 Voids/Openings: ${frontView['1_Geometry_MASTER']?.['A-4_Voids_Openings']?.Punching_Ratio || 'N/A'}
+- A-5 Roof & Base: ${frontView['1_Geometry_MASTER']?.['A-5_Specific_Features']?.Roof_and_Base || 'N/A'}
+- B-1 Primary Materiality: ${frontView['2_Property_SLAVE']?.['B-1_Primary_Materiality']?.Base_Color || 'N/A'} | PBR: ${frontView['2_Property_SLAVE']?.['B-1_Primary_Materiality']?.PBR_Values || 'N/A'}
+- B-2 Glazing: ${frontView['2_Property_SLAVE']?.['B-2_Optical_Glazing']?.Glass_Type || 'N/A'}
+- B-4 Illumination: ${frontView['2_Property_SLAVE']?.['B-4_Illumination_Shadows']?.Shadow_Intensity || 'N/A'}`
         : '';
 
-      // Layer C: Blind Spot Inference trigger
-      const layerC_blindspot = `
-## Step 3: Layering & Blind Spot Inference
-- Perspective: ${currentAngle === '06:00' ? '1-Point (face-on)' : '2-Point (corner/side)'}
-- Blind Spot Logic: If target is Rear (12:00) or hidden side, extract Design DNA from front, infer MEP/Service Door placement.
-- Material Injection: Lock original textures. Apply Relighting only for new solar angle (${currentTime}).`;
+      // [V9 FIX 2] Layer C: Blind Spot Inference
+      // Full protocol injection ONLY for blind spot angles (non-front views)
+      const BLIND_SPOT_ANGLES = ['09:00', '12:00', '04:30', '07:30', '1:30', '10:30', '3:00'];
+      const isBlindSpot = BLIND_SPOT_ANGLES.includes(currentAngle);
+
+      const layerC_blindspot = isBlindSpot
+        ? `
+## Step 3: Blind Spot Inference (protocol-Blind Spot Inference — FULL ACTIVATION)
+[This view is a BLIND SPOT. Execute full 3-phase inference protocol.]
+
+### Phase 1: Context & Zoning Inference
+- Perspective: 2-Point (corner/side)
+- Context Typing: Analyze the background of IMAGE 1 for urban density.
+  * If urban/dense (adjacent buildings visible): Type A [Urban/Attached] — Side and Rear facades are CLOSED firewall walls. Minimal or zero openings on blind sides.
+  * If detached/landmark: Type B [Detached] — Extend front design language continuously to all 4 facades.
+- Inside-Out Logic: Infer building program (Residential/Office/Commercial) from window proportions and floor heights. Place virtual Core (stairs, restrooms, MEP shafts) on Rear or side-rear. Core location determines blind-facade window placement.
+
+### Phase 2: Facade Generation Rules
+- Rear Facade: Replace main entrance with SERVICE DOOR. Replace large windows with small ventilation windows or louvers. Add MEP Details: HVAC ducts, outdoor units, gas piping.
+- Side Facade: Wrap front finish material and slab lines continuously. Density control per context type (Type A = minimal openings, Type B = match front).
+- Top/Roof: Identify parapet type. Flat Roof = waterproof membrane + HVAC units + water tank. Pitched Roof = roofing material pattern + gutters + downspouts.
+
+### Phase 3: Verification
+- Ensure blind facade design logic connects seamlessly to front facade geometry.
+- No blank, undefined, or hallucinated surfaces.
+- Material Injection: Lock original textures. Apply Relighting only for new solar angle (${currentTime}).`
+        : `
+## Step 3: Layering (Front View — No Blind Spot)
+- Perspective: 1-Point (face-on)
+- Material Injection: Lock original textures. Apply Relighting for time of day (${currentTime}).`;
+
 
       const elevationSlots = getElevationSlot(currentAngle);
       const elevationLabel = elevationSlots.map(s => s.label).join('+');
