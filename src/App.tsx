@@ -39,58 +39,34 @@ const determineScenario = (angleStr: string, altitude: number, lens: number) => 
   return '[Scenario A] Street View: Fujifilm GFX 100S + 23mm Tilt-Shift';
 };
 
-// [V18] Map 5-IVSP Angle to 2x4 T-Shape Horizontal Layout Slots
-// NEW T-Shape Layout: Row0=[_, TOP, _, _], Row1=[LEFT, FRONT, RIGHT, REAR]
+// V70/V71: Map 5-IVSP Angle to 3x3 Cross Layout Slots
+// NEW Cross Layout: Row0=[_,REAR,_], Row1=[LEFT,TOP,RIGHT], Row2=[_,FRONT,_]
 const getElevationSlot = (angle: string): { row: number; col: number; label: string }[] => {
-  if (angle === '06:00') return [{ row: 1, col: 1, label: 'FRONT' }];
-  if (angle === '12:00') return [{ row: 1, col: 3, label: 'REAR' }];
+  if (angle === '06:00') return [{ row: 2, col: 1, label: 'FRONT' }];
+  if (angle === '12:00') return [{ row: 0, col: 1, label: 'REAR' }];
   if (angle === '3:00')  return [{ row: 1, col: 2, label: 'RIGHT' }];
   if (angle === '09:00') return [{ row: 1, col: 0, label: 'LEFT' }];
-  // Corner angles → composite (both adjacent faces) MUST BE [Left-hand face, Right-hand face] order
-  if (angle === '04:30') return [{ row: 1, col: 1, label: 'FRONT' }, { row: 1, col: 2, label: 'RIGHT' }];
-  if (angle === '07:30') return [{ row: 1, col: 0, label: 'LEFT' },  { row: 1, col: 1, label: 'FRONT' }];
-  if (angle === '1:30')  return [{ row: 1, col: 2, label: 'RIGHT' }, { row: 1, col: 3, label: 'REAR' }];
-  if (angle === '10:30') return [{ row: 1, col: 3, label: 'REAR' },  { row: 1, col: 0, label: 'LEFT' }];
-  return [{ row: 1, col: 1, label: 'FRONT' }];
+  // Corner angles → composite (both adjacent faces)
+  if (angle === '1:30')  return [{ row: 0, col: 1, label: 'REAR' },  { row: 1, col: 2, label: 'RIGHT' }];
+  if (angle === '04:30') return [{ row: 1, col: 2, label: 'RIGHT' }, { row: 2, col: 1, label: 'FRONT' }];
+  if (angle === '07:30') return [{ row: 2, col: 1, label: 'FRONT' }, { row: 1, col: 0, label: 'LEFT' }];
+  if (angle === '10:30') return [{ row: 1, col: 0, label: 'LEFT' },  { row: 0, col: 1, label: 'REAR' }];
+  return [{ row: 2, col: 1, label: 'FRONT' }];
 };
 
-// [V18/V23] Crop a single elevation cell from the 2x4 T-Shape sheet using proportional bldgRatio
-const cropElevationFromSheet = (
-  sheetDataUrl: string, 
-  slot: { row: number; col: number; label?: string },
-  bldgRatio: { width: number; depth: number; height: number }
-): Promise<string> => {
+// V70: Crop a single elevation cell from the 3x3 Cross Layout sheet
+const cropElevationFromSheet = (sheetDataUrl: string, slot: { row: number; col: number; label: string }): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const W = bldgRatio.width || 10;
-      const D = bldgRatio.depth || 10;
-      const H = bldgRatio.height || 10;
-
-      const totalW = (D * 2) + (W * 2);
-      const totalH = D + H;
-
-      const unitX = img.width / totalW;
-      const unitY = img.height / totalH;
-
-      let startX = 0;
-      if (slot.col > 0) startX += D * unitX;
-      if (slot.col > 1) startX += W * unitX;
-      if (slot.col > 2) startX += D * unitX;
-
-      let startY = 0;
-      if (slot.row > 0) startY += D * unitY;
-
-      const cellW = (slot.col % 2 === 0) ? (D * unitX) : (W * unitX);
-      const cellH = (slot.row === 0) ? (D * unitY) : (H * unitY);
-
+      const cellW = Math.floor(img.width / 3);
+      const cellH = Math.floor(img.height / 3);
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.floor(cellW));
-      canvas.height = Math.max(1, Math.floor(cellH));
+      canvas.width = cellW;
+      canvas.height = cellH;
       const ctx = canvas.getContext('2d');
       if (!ctx) { reject(new Error('Canvas context unavailable')); return; }
-      
-      ctx.drawImage(img, Math.floor(startX), Math.floor(startY), Math.floor(cellW), Math.floor(cellH), 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, slot.col * cellW, slot.row * cellH, cellW, cellH, 0, 0, cellW, cellH);
       resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = reject;
@@ -99,12 +75,12 @@ const cropElevationFromSheet = (
 };
 
 
-// --- Site Plan Diagram Component ---
+// SVG-based Viewpoint Diagram Component
 const SitePlanDiagram = ({ angle, lens, isAnalyzing, analysisStep, visibleV0Index }: { 
   angle: string, 
   lens: number, 
   isAnalyzing: boolean, 
-  analysisStep?: string, 
+  analysisStep: string, 
   visibleV0Index?: number | null 
 }) => {
   // Mapping clock-face strings to degrees
@@ -153,8 +129,7 @@ const SitePlanDiagram = ({ angle, lens, isAnalyzing, analysisStep, visibleV0Inde
       {isAnalyzing && (
         <div className="absolute inset-0 bg-white/80 dark:bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 transition-colors duration-300">
           <Loader2 size={32} className="animate-spin mb-3" />
-          <p className="font-display text-sm uppercase tracking-widest text-center px-4">Analyzing Viewpoint...</p>
-          <p className="font-mono text-[9px] leading-relaxed opacity-60 mt-1 uppercase">Mapping Site Geometry</p>
+          <p className="font-display text-xs uppercase tracking-widest text-center px-4">{analysisStep || 'Analyzing...'}</p>
         </div>
       )}
     </div>
@@ -201,7 +176,7 @@ const dbLoad = async (): Promise<any> => {
 
 interface CanvasItem {
   id: string;
-  type: 'upload' | 'generated' | 'path'; // [V19] Added path support
+  type: 'upload' | 'generated';
   src: string;
   x: number;
   y: number;
@@ -210,19 +185,16 @@ interface CanvasItem {
   // V74: Metadata linking
   motherId: string | null;
   parameters: {
-    angleIndex?: number;
-    altitudeIndex?: number;
-    lensIndex?: number;
-    timeIndex?: number;
+    angleIndex: number;
+    altitudeIndex: number;
+    lensIndex: number;
+    timeIndex: number;
     analyzedOpticalParams?: any | null;
     elevationParams?: any | null;
     sitePlanImage?: string | null;
     architecturalSheetImage?: string | null;
     elevationImages?: Record<string, string> | null;
     bldgRatio?: { width: number; depth: number; height: number } | null;
-    // [V19] Path properties
-    points?: { x: number; y: number }[];
-    strokeWidth?: number;
   } | null;
 }
 
@@ -238,7 +210,7 @@ export default function App() {
   const isDraggingPanRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragStartRef = useRef({ x: 0, y: 0 });
-  const resizeStartRef = useRef<{ x: number, y: number, width: number, height: number, itemX: number, itemY: number, childPaths?: Record<string, any> }>({ x: 0, y: 0, width: 0, height: 0, itemX: 0, itemY: 0 });
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0, itemX: 0, itemY: 0 });
   const resizeCornerRef = useRef({ dx: 1, dy: 1 });
   // Keep State for render (cursor CSS)
   const [isDraggingItem, setIsDraggingItem] = useState(false);
@@ -268,6 +240,10 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [sitePlanImage, setSitePlanImage] = useState<string | null>(null);
   const [architecturalSheetImage, setArchitecturalSheetImage] = useState<string | null>(null);
+
+  // V25: Extended UI State
+  const [analysisStep, setAnalysisStep] = useState<string>('');
+  const [visibleV0Index, setVisibleV0Index] = useState<number | null>(null);
 
   // Zoom & Pan State
   const [canvasZoom, setCanvasZoom] = useState(100);
@@ -511,16 +487,7 @@ export default function App() {
             isResizingItemRef.current = true;
             setIsResizingItem(true);
             resizeCornerRef.current = { dx: corner.dx, dy: corner.dy };
-            
-            // [V19] Capture child paths for sync scaling
-            const childPaths: Record<string, any> = {};
-            canvasItems.forEach(ci => {
-              if (ci.motherId === item.id && ci.type === 'path' && ci.parameters?.points) {
-                childPaths[ci.id] = { ...ci, points: [...ci.parameters.points] };
-              }
-            });
-
-            resizeStartRef.current = { x: coords.x, y: coords.y, width: item.width, height: item.height, itemX: item.x, itemY: item.y, childPaths };
+            resizeStartRef.current = { x: coords.x, y: coords.y, width: item.width, height: item.height, itemX: item.x, itemY: item.y };
             e.currentTarget.setPointerCapture(e.pointerId);
             return;
           }
@@ -571,44 +538,23 @@ export default function App() {
       const dy = coords.y - resizeStartRef.current.y;
       const aspect = resizeStartRef.current.width / resizeStartRef.current.height;
 
-      // [V19] Calculate new width based on drag delta and corner position
-      const rawDeltaW = dx * resizeCornerRef.current.dx;
-      const newWidth = Math.max(resizeStartRef.current.width + rawDeltaW, 50);
-      const newHeight = newWidth / aspect;
-      const scaleRatio = newWidth / resizeStartRef.current.width;
-
-      // [V19] Calculate new position based on resizing corner
-      const newX = resizeCornerRef.current.dx === -1
-        ? resizeStartRef.current.itemX + (resizeStartRef.current.width - newWidth)
-        : resizeStartRef.current.itemX;
-      const newY = resizeCornerRef.current.dy === -1
-        ? resizeStartRef.current.itemY + (resizeStartRef.current.height - newHeight)
-        : resizeStartRef.current.itemY;
-
       setCanvasItems(prev => prev.map(item => {
-        if (item.id === selectedItemId) {
-          // Update the resized item
-          return { ...item, x: newX, y: newY, width: newWidth, height: newHeight };
-        } else if (item.motherId === selectedItemId && item.type === 'path' && resizeStartRef.current.childPaths?.[item.id]) {
-          // [V19] Sync associated sketch paths (scaling points and stroke width)
-          const original = resizeStartRef.current.childPaths[item.id];
-          const scaledRelX = (original.x - resizeStartRef.current.itemX) * scaleRatio;
-          const scaledRelY = (original.y - resizeStartRef.current.itemY) * scaleRatio;
-          
-          return { 
-            ...item, 
-            x: newX + scaledRelX, 
-            y: newY + scaledRelY, 
-            width: original.width * scaleRatio, 
-            height: original.height * scaleRatio,
-            parameters: {
-              ...item.parameters,
-              points: original.points.map((p: any) => ({ x: p.x * scaleRatio, y: p.y * scaleRatio })),
-              strokeWidth: (original.parameters?.strokeWidth || 4) * scaleRatio
-            }
-          };
-        }
-        return item;
+        if (item.id !== selectedItemId) return item;
+
+        // Width changes: right corner → expand right, left corner → expand left (flip sign)
+        const rawDeltaW = dx * resizeCornerRef.current.dx;
+        const newWidth = Math.max(resizeStartRef.current.width + rawDeltaW, 50);
+        const newHeight = newWidth / aspect;
+
+        // Position: left corners move x; top corners move y
+        const newX = resizeCornerRef.current.dx === -1
+          ? resizeStartRef.current.itemX + (resizeStartRef.current.width - newWidth)
+          : resizeStartRef.current.itemX;
+        const newY = resizeCornerRef.current.dy === -1
+          ? resizeStartRef.current.itemY + (resizeStartRef.current.height - newHeight)
+          : resizeStartRef.current.itemY;
+
+        return { ...item, x: newX, y: newY, width: newWidth, height: newHeight };
       }));
     }
   };
@@ -756,27 +702,33 @@ export default function App() {
       }
 
       const analysisPrompt = `
-        You are a Deterministic BIM Compiler. Analyze this architectural image.
+        [Meta-Cognitive Directive]
+        You are an 'Architectural Logic Engine' (Protocol A). 
+        TASK: Reverse-engineer the exact camera viewpoint (Angle, Altitude, Lens) and time from the provided image.
 
-        [GLOBAL DIRECTIVE]
-        - The building's main facade (front) is ALWAYS the relative "06:00" vector.
-        - Follow the '5면 정사영 전개도 건축물 정보 작성 가이드라인' exactly.
-        - For each of the 5 views (Front, Top, Right, Left, Rear), fill in BOTH Part A (Geometry) and Part B (Property) per the master template.
-        - Blind spots (Rear, sides) must be logically inferred from visible facade using Master-Priority Snapping.
+        [VISUAL ANCHOR DEFINITIONS]
+        - FRONT FACADE: Identified by the primary entrance, main lobby glazing, large-scale signage, or the most complex architectural feature.
+        - SIDE/REAR FACADE: Characterized by repetitive window patterns, secondary service doors, or simpler materiality.
 
-        [ANGLE CLOCK-FACE DICTIONARY]
-        The building's main facade (Front) is at the center of the clock (06:00).
-        * 06:00 = Front View (Face-on)
-        * 03:00 = Right Side View
-        * 09:00 = Left Side View
-        * 12:00 = Rear View
-        * 04:30 = Front-Right Corner View (Isometric view where Front facade is on the LEFT and Right facade is on the RIGHT)
-        * 07:30 = Front-Left Corner View (Isometric view where Left facade is on the LEFT and Front facade is on the RIGHT)
-        * 01:30 = Rear-Right Corner View (Isometric view where Right facade is on the LEFT and Rear facade is on the RIGHT)
-        * 10:30 = Rear-Left Corner View (Isometric view where Rear facade is on the LEFT and Left facade is on the RIGHT)
+        [ANGLE CLOCK-FACE DICTIONARY - STRICT IF-THEN RULES]
+        Reference Building Center: 06:00 (Front Facade).
+        1. IF (Center of image is FRONT face-on) → THEN 06:00.
+        2. IF (Center of image is RIGHT face-on) → THEN 03:00.
+        3. IF (Center of image is LEFT face-on) → THEN 09:00.
+        4. IF (Center of image is REAR face-on) → THEN 12:00.
+        5. IF (Left part of image is FRONT && Right part is RIGHT) → THEN 04:30 (Front-Right Corner).
+        6. IF (Left part of image is LEFT && Right part is FRONT) → THEN 07:30 (Front-Left Corner).
+        7. IF (Left part of image is RIGHT && Right part is REAR) → THEN 01:30 (Rear-Right Corner).
+        8. IF (Left part of image is REAR && Right part is LEFT) → THEN 10:30 (Rear-Left Corner).
 
+        [ANTI-MORPHOLOGY FILTER]
+        In the 'elevation_views' and 'elevation_parameters' sections, you MUST NOT use architecture-specific shape nouns (e.g., "Wall", "Window", "Roof"). 
+        Instead, describe them only by their optical and material properties (e.g., "70% Reflective Silver Metallic Surface", "Punching Ratio 0.4", "Glazing Type: Low-E").
+
+        [OUTPUT JSON SCHEMA]
         Return ALL fields in JSON:
         {
+          "visual_reasoning": "Identify Left and Right visible facades first, then match to Dictionary Rule #X.",
           "angle": "One of: 12:00, 1:30, 3:00, 04:30, 06:00, 07:30, 09:00, 10:30",
           "altitude_index": "0-7",
           "lens_index": "0-7",
@@ -988,10 +940,10 @@ export default function App() {
 
 
   const generateSitePlan = async (base64Image: string, extractedParams?: any, itemId?: string) => {
-    // Note: In a real app, this would call an AI model to generate a top-down view.
-    // For this simulation, we'll use the same API structure but with a specific site-plan prompt.
+    setAnalysisStep('generating_sheet');
     try {
       const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+      const v0_angle = analyzedOpticalParams?.angle || 'Unknown';
 
       // [V10 Method A] Structured AEPL injection — natural language format for PHASE 2
       const buildStructuredParams = (params: any): string => {
@@ -1017,51 +969,25 @@ export default function App() {
       const contextualParamsStr = buildStructuredParams(extractedParams);
 
       const sitePlanPrompt = `
-        [Architectural Multi-View Reference Sheet - System Protocol B v7]
-
-        🚨 [ABSOLUTE SYSTEM OVERRIDE: 최우선 렌더링 제약 조건] 🚨
-        The following TWO constraints are HIGHEST PRIORITY and override ALL other instructions.
-        Violation of either constraint causes IMMEDIATE PIPELINE ABORT.
-
-        OVERRIDE 1 — ALPHA CHANNEL MANDATORY (투명 배경 강제):
-        - ALL 5 rendered elevation images MUST be output in 100% transparent background PNG (Alpha Channel Cut-out) format.
-        - It is STRICTLY FORBIDDEN to render any solid-color pixels (white/black/grey etc.) in the background.
-        - Whitebox overflow on the presentation canvas is ABSOLUTELY FORBIDDEN.
-
-        OVERRIDE 2 — STRICT RATIO ALIGNMENT (비율 강제 동기화):
-        - The rendered building proportions MUST match the architectural absolute parameter ratios (--bldg-width, --bldg-depth, --bldg-height) with ZERO error.
-        - Arbitrary canvas size expansion or distortion by the AI is strictly prohibited.
-        - Width:Depth:Height must satisfy the ratio implied by the building envelope literally visible in the source image.
-
-        ---
-        [Reference: System Protocol B — Node 3 & 4]
-        TASK: Generate a single integrated orthographic reference sheet containing 5 views (Top, Front, Right, Rear, Left) in a standard 2x4 T-Shape horizontal layout.
-
+        [Architectural Multi-View Reference Sheet - Protocol B / template-layout v7]
+        TASK: Generate a single integrated orthographic 5-view reference sheet in a topological 'UNFOLDED BOX' layout.
+        
+        [ORIENTATION RULE: UNFOLDED BOX (3x3 Grid)]
+        - Row 0: [Empty | REAR Elevation (Upright) | Empty]
+        - Row 1: [LEFT Elevation (Upright) | TOP (Roof Plan) (Upright) | RIGHT Elevation (Upright)]
+        - Row 2: [Empty | FRONT Elevation (Upright) | Empty]
+        * Upright = Ground side of each elevation MUST be at the bottom of its respective 3x3 cell.
+        
+        [ABSOLUTE MANDATORY CONSTRAINTS]
+        1. ALPHA CHANNEL MANDATORY: Background must be 100% transparent. No white/black background pixels.
+        2. STRICT RATIO ALIGNMENT: Each elevation's pixel dimensions must strictly match the building proportions.
+        3. NO Perspective (Orthographic only), NO text, NO labels.
+        
         [CONTEXTUAL IMAGE SYNTHESIS]
-        - Clone and PRESERVE the exact textures, materials, and architectural geometry of the visible facades from the uploaded original image (Source of Truth).
-        - SYNTHESIZE the blind spots (Rear, unseen sides) logically, matching the established context and the following extracted parameters:
+        - Visible Facades: Based on V₀ (${v0_angle}), map the source image textures to the corresponding faces.
+        - Blind Spots: Infer hidden facades logically following the Master-Priority Snapping (aligning Z-heights to Front).
+        - Material Specs: Apply Slave Property Specs consistently across all 5 views.
 ${contextualParamsStr}
-
-        [V10 Method C] SOURCE IMAGE VIEWPOINT:
-        - The uploaded image was captured from: Angle ${analyzedOpticalParams?.angle ?? 'Unknown'} | Altitude ${analyzedOpticalParams?.altitude ?? 'Unknown'} | Lens ${analyzedOpticalParams?.lens ?? 'Unknown'}
-        - Use this to understand which facade is visible in the source and infer all other hidden facades accordingly.
-        - The result must be a holistic pixel-level generation combining Known (Source Image) + Unknown (AI Inferred Constraints).
-
-        [ORIENTATION RULE — V18: 2x4 T-Shape Horizontal Layout]
-        LAYOUT SPECIFICATION (2 Rows x 4 Columns Grid):
-        - Row 1: [Empty | TOP (Roof Plan) | Empty | Empty]
-        - Row 2: [LEFT Elevation | FRONT Elevation | RIGHT Elevation | REAR Elevation]
-
-        CRITICAL ALIGNMENT RULES:
-        - All 4 elevations in Row 2 must share an identical height (Z-axis height of the building).
-        - The TOP (Roof Plan) in Row 1 Col 2 must share the same width as the FRONT elevation below it.
-        - LEFT and RIGHT elevations in Row 2 have width equal to the building's depth.
-        - The layout represents a horizontal, unfolded orthographic projection (like an architectural drawing sheet).
-
-        PROJECTION: True Orthographic (FOV=0), absolute zero perspective.
-        STYLE: Realistic architectural elevation style matching the original rendering or photo's texture, NO perspective effects.
-        BACKGROUND: Pure Transparent Background (Optical Null Space) — ABSOLUTE SYSTEM OVERRIDE 1 applies.
-        CONSTRAINTS: All views must be perfectly aligned at the vertices. NO 3D perspective, NO text, NO labels.
       `.trim();
 
       const base64Data = base64Image.split(',')[1];
@@ -1084,47 +1010,26 @@ ${contextualParamsStr}
             const fullSheetData = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
             setArchitecturalSheetImage(fullSheetData);
             
-            // [V18/V23] Extract all 5 views from the 2x4 T-Shape layout accurately using bldgRatio
-            // Layout: Row0=[_, TOP, _, _], Row1=[LEFT, FRONT, RIGHT, REAR]
+            // [V11] Extract all 5 views from the 3x3 cross layout and store independently
+            // Layout: Row0=[_,REAR,_], Row1=[LEFT,TOP,RIGHT], Row2=[_,FRONT,_]
             const img = new Image();
             img.onload = () => {
-              const sourceItem = canvasItems.find(i => i.id === itemId);
-              const bldgRatio = (sourceItem?.parameters as any)?.bldgRatio || { width: 10, depth: 10, height: 10 };
-              const W = Number(bldgRatio.width) || 10;
-              const D = Number(bldgRatio.depth) || 10;
-              const H = Number(bldgRatio.height) || 10;
-
-              const totalW = (D * 2) + (W * 2);
-              const totalH = D + H;
-
-              const unitX = img.width / totalW;
-              const unitY = img.height / totalH;
+              const cellW = img.width / 3;
+              const cellH = img.height / 3;
 
               const cropCell = (col: number, row: number): string => {
-                let startX = 0;
-                if (col > 0) startX += D * unitX;
-                if (col > 1) startX += W * unitX;
-                if (col > 2) startX += D * unitX;
-
-                let startY = 0;
-                if (row > 0) startY += D * unitY;
-
-                const cW = (col % 2 === 0) ? (D * unitX) : (W * unitX);
-                const cH = (row === 0) ? (D * unitY) : (H * unitY);
-
                 const c = document.createElement('canvas');
-                c.width = Math.max(1, Math.floor(cW)); 
-                c.height = Math.max(1, Math.floor(cH));
+                c.width = cellW; c.height = cellH;
                 const cx = c.getContext('2d');
-                if (cx) cx.drawImage(img, Math.floor(startX), Math.floor(startY), Math.floor(cW), Math.floor(cH), 0, 0, c.width, c.height);
+                if (cx) cx.drawImage(img, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
                 return c.toDataURL();
               };
 
-              const topImg    = cropCell(1, 0); // Row 0, Col 1
-              const leftImg   = cropCell(0, 1); // Row 1, Col 0
-              const frontImg  = cropCell(1, 1); // Row 1, Col 1
-              const rightImg  = cropCell(2, 1); // Row 1, Col 2
-              const rearImg   = cropCell(3, 1); // Row 1, Col 3
+              const rearImg   = cropCell(1, 0);
+              const leftImg   = cropCell(0, 1);
+              const topImg    = cropCell(1, 1);
+              const rightImg  = cropCell(2, 1);
+              const frontImg  = cropCell(1, 2);
 
               setSitePlanImage(topImg);
 
@@ -1317,19 +1222,18 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
           { inlineData: { data: base64Data, mimeType: mimeType } },
         ];
 
-        // V70/V71/V23: Crop matching elevation slots with bldgRatio proportionality
+        // V70/V71: Crop matching elevation slots and inject all
         // Corner angles inject two adjacent faces as separate images
         if (architecturalSheetImage) {
           const slots = getElevationSlot(currentAngle);
           for (const slot of slots) {
             try {
-              const bldgRatio = (sourceItem.parameters as any)?.bldgRatio || { width: 10, depth: 10, height: 10 };
-              const croppedElevation = await cropElevationFromSheet(architecturalSheetImage, slot, bldgRatio);
+              const croppedElevation = await cropElevationFromSheet(architecturalSheetImage, slot);
               const cropBase64 = croppedElevation.split(',')[1];
               parts.push({ inlineData: { data: cropBase64, mimeType: 'image/png' } });
-              console.log(`[V70] Injecting cropped elevation: Row${slot.row}, Col${slot.col}`);
+              console.log(`[V70] Injecting cropped elevation: ${slot.label} (Row${slot.row}, Col${slot.col})`);
             } catch (e) {
-              console.warn('[V70] Elevation crop failed:', slot, e);
+              console.warn('[V70] Elevation crop failed:', slot.label, e);
             }
           }
         }
@@ -1688,34 +1592,92 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                       >
                         <div className="flex w-full h-full">
                             {/* Left: Architectural Sheet (V82: Only sheet shown) */}
-                            <div className="flex-1 flex w-full h-full border border-black/10 dark:border-white/10 rounded-xl overflow-hidden bg-black/5">
-                              {/* [V11] 5-Panel Orthographic Grid Artboard */}
-                            {item.parameters?.elevationImages ? (() => {
-                              const ei = item.parameters.elevationImages as any;
-                              const r = (item.parameters as any).bldgRatio || { width: 10, depth: 7, height: 13 };
-                              const W = r.width, D = r.depth, H = r.height;
-                              return (
-                                <div style={{
-                                  width: '100%', height: '100%',
-                                  display: 'grid',
-                                  // [V18] 2x4 T-Shape: LEFT | FRONT | RIGHT | REAR with TOP floating above FRONT
-                                  gridTemplateColumns: `${D}fr ${W}fr ${D}fr ${W}fr`,
-                                  gridTemplateRows: `${D}fr ${H}fr`,
-                                  gridTemplateAreas: `'. top . .' 'left front right rear'`,
-                                  gap: 0,
-                                  // [V21] Defense Maximized: block any image from pushing the grid
-                                  minWidth: 0,
-                                  minHeight: 0,
-                                }}>
-                                  {(['top','left','front','right','rear'] as const).map(view => (
-                                    <div key={view} style={{ gridArea: view, overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
-                                      {ei[view] && <img src={ei[view]} style={{ width:'100%', height:'100%', objectFit:'fill', display:'block' }} alt={view} />}
+                            <div className="flex flex-col w-full h-full relative p-20 items-center justify-center overflow-auto">
+                          {/* Title Overlay */}
+                          <div className="absolute top-10 left-10 z-10 flex flex-col gap-1">
+                            <h2 className="font-['Bebas_Neue'] text-4xl tracking-[0.1em] text-black dark:text-white leading-none">IMAGE TO ELEVATION: UNFOLDED BOX</h2>
+                            <div className="h-[2px] w-full bg-black dark:bg-white/20" />
+                          </div>
+
+                          {/* [V11] 5-Panel Orthographic Grid Artboard - UNFOLDED BOX Protocol v7 */}
+                          {item.parameters?.elevationImages ? (() => {
+                            const ei = item.parameters.elevationImages as any;
+                            const r = (item.parameters as any).bldgRatio || { width: 10, depth: 8, height: 15 };
+                            const W = r.width, D = r.depth, H = r.height;
+                            
+                            // [V28/V29] 통합 개선: 가용 영역 확장 (1500x1100) 및 간격 축소 (12px)
+                            const gapTotal = 24; // 12px * 2 gaps
+                            const availableW = 1500 - gapTotal;
+                            const availableH = 1100 - gapTotal;
+                            
+                            const dynamicScaleW = availableW / (2 * H + W);
+                            const dynamicScaleH = availableH / (2 * H + D);
+                            
+                            // 최소 배율 25px 보장 (필요 시 스크롤), 최대 배율 45px로 상향하여 가시성 극대화
+                            const SCALE = Math.max(25, Math.min(dynamicScaleW, dynamicScaleH, 45)); 
+
+                            // Grid Areas:
+                            // . rear .
+                            // left top right
+                            // . front .
+
+                            return (
+                              <div 
+                                className="grid gap-[12px] relative mt-10"
+                                style={{
+                                  gridTemplateColumns: `${H * SCALE}px ${W * SCALE}px ${H * SCALE}px`,
+                                  gridTemplateRows: `${H * SCALE}px ${D * SCALE}px ${H * SCALE}px`,
+                                  gridTemplateAreas: `". rear ." "left top right" ". front ."`,
+                                }}
+                              >
+                                {([
+                                  { id: 'top',   area: 'top',   w: W, h: D, r: 0 },
+                                  { id: 'front', area: 'front', w: W, h: H, r: 0 },
+                                  { id: 'rear',  area: 'rear',  w: W, h: H, r: 180 },
+                                  { id: 'left',  area: 'left',  w: D, h: H, r: 90 },
+                                  { id: 'right', area: 'right', w: D, h: H, r: -90 }
+                                ] as const).map(view => (
+                                  <div 
+                                    key={view.id} 
+                                    className="relative flex items-center justify-center min-w-0 min-h-0"
+                                    style={{ gridArea: view.area }}
+                                  >
+                                    <div 
+                                      className="relative bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded overflow-hidden" 
+                                      style={{ 
+                                        width: view.w * SCALE, 
+                                        height: view.h * SCALE,
+                                        transform: `rotate(${view.r}deg)`,
+                                        transformOrigin: 'center center'
+                                      }}
+                                    >
+                                      {ei[view.id] ? (
+                                        <img src={ei[view.id]} className="w-full h-full object-cover block" alt={view.id} />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center opacity-20 font-mono text-[10px]">INFERRING...</div>
+                                      )}
                                     </div>
-                                  ))}
-                                </div>
-                              );
-                            })()
-                            : item.parameters?.architecturalSheetImage ? (
+                                    
+                                    {/* Label Overlay - Outside the rotated wrap, placed at the "ground" of each view */}
+                                    <div 
+                                      className="absolute whitespace-nowrap font-mono text-[11px] font-bold tracking-widest uppercase opacity-60"
+                                      style={{
+                                        bottom: view.r === 0 ? '-36px' : (view.r === 180 ? 'auto' : (view.r === 90 ? 'auto' : (view.r === -90 ? 'auto' : '-36px'))),
+                                        top: view.r === 180 ? '-36px' : 'auto',
+                                        left: view.r === 90 ? '-60px' : (view.r === -90 ? 'auto' : '50%'),
+                                        right: view.r === -90 ? '-60px' : 'auto',
+                                        transform: (view.r === 0 || view.r === 180) ? 'translateX(-50%)' : (view.r === 90 ? 'translateY(-50%) rotate(-90deg)' : 'translateY(-50%) rotate(90deg)'),
+                                        transformOrigin: 'center'
+                                      }}
+                                    >
+                                      {view.id === 'top' ? 'TOP (PLAN)' : view.id}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()
+                          : item.parameters?.architecturalSheetImage ? (
                                 <div className="relative w-full h-full flex items-center justify-center p-4">
                                   <img src={item.parameters.architecturalSheetImage} className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-screen" alt="Site Plan" />
                                 </div>
@@ -1724,7 +1686,7 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                                       <p className="font-mono opacity-40 uppercase tracking-widest" style={{ fontSize: `${14 / (canvasZoom / 100)}px`}}>No Architectural Sheet Generated</p>
                                     </div>
                                 )}
-                            </div>
+                        </div>
                         </div>
                       </div>
                     )}
@@ -1783,16 +1745,19 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                 {/* Sidebar Content Wrapper */}
                 <div className={`flex flex-col h-full overflow-y-auto transition-opacity duration-200 ${isRightPanelOpen ? 'opacity-100 delay-150' : 'opacity-0'}`}>
                 
-                  {/* [V20] Sidebar Consolidated: Parameter View Only (Pagination Dots & Protocol DNA Removed) */}
-                  <div className="flex flex-col gap-5 p-5 pt-8 flex-1">
-                    <div>
-                      <div className="font-mono text-xs font-bold uppercase tracking-widest opacity-70 mb-3">
-                        Viewpoint
-                      </div>
+                  {/* V25: Dot Navigation Removed */}
+                  <div className="pt-6 pb-2" />
+                
+                  <div className="flex flex-col gap-5 p-5 flex-1">
+                    {/* V25: VIEWPOINT Label + Diagram */}
+                    <div className="flex flex-col">
+                      <div className="font-mono text-xs font-bold tracking-wide uppercase mb-3 opacity-70">Viewpoint</div>
                       <SitePlanDiagram 
                         angle={ANGLES[angleIndex]} 
                         lens={LENSES[lensIndex].value} 
                         isAnalyzing={isAnalyzing}
+                        analysisStep={analysisStep}
+                        visibleV0Index={visibleV0Index}
                       />
                     </div>
                     
@@ -1810,65 +1775,65 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                           <span className="opacity-70 uppercase tracking-widest">Altitude</span>
                           <span className="font-bold">{ALTITUDES[altitudeIndex].label}</span>
                         </div>
-                        <input type="range" min="0" max={ALTITUDES.length - 1} step="1" value={altitudeIndex} onChange={(e) => setAltitudeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
+                        <input type="range" min="0" max={ALTITUDES.length-1} step="1" value={altitudeIndex} onChange={(e) => setAltitudeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
                       </div>
                       <div>
                         <div className="flex justify-between font-mono text-xs leading-normal tracking-wide mb-1.5">
                           <span className="opacity-70 uppercase tracking-widest">Lens</span>
                           <span className="font-bold">{LENSES[lensIndex].label}</span>
                         </div>
-                        <input type="range" min="0" max={LENSES.length - 1} step="1" value={lensIndex} onChange={(e) => setLensIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
+                        <input type="range" min="0" max={LENSES.length-1} step="1" value={lensIndex} onChange={(e) => setLensIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
                       </div>
                       <div>
                         <div className="flex justify-between font-mono text-xs leading-normal tracking-wide mb-1.5">
                           <span className="opacity-70 uppercase tracking-widest">Time</span>
                           <span className="font-bold">{TIMES[timeIndex]}</span>
                         </div>
-                        <input type="range" min="0" max={TIMES.length - 1} step="1" value={timeIndex} onChange={(e) => setTimeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
+                        <input type="range" min="0" max={TIMES.length-1} step="1" value={timeIndex} onChange={(e) => setTimeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
                       </div>
                     </div>
                   </div>
 
-                  {/* BOTTOM ACTION */}
-                  <div className="p-5 mt-auto border-t border-black/10 dark:border-white/10">
-                    {(() => {
-                      const selItem = canvasItems.find(i => i.id === selectedItemId);
-                      if (!selItem) return null;
-                      if (selItem.parameters?.analyzedOpticalParams || selItem.type === 'generated') {
-                        return (
-                          <button 
-                            onClick={handleGenerate}
-                            disabled={isGenerating}
-                            className="relative w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className={`block transition-opacity ${isGenerating ? 'opacity-0' : 'opacity-100'}`}>Generate</span>
-                            {isGenerating && (
-                              <span className="absolute inset-0 flex items-center justify-center">
-                                <Loader2 size={18} className="animate-spin" />
-                              </span>
-                            )}
-                          </button>
-                        );
-                      }
+                {/* BOTTOM ACTION */}
+                <div className="p-5 mt-auto border-t border-black/10 dark:border-white/10">
+                  {(() => {
+                    const selItem = canvasItems.find(i => i.id === selectedItemId);
+                    if (!selItem) return null;
+                    if (selItem.parameters?.analyzedOpticalParams || selItem.type === 'generated') {
                       return (
                         <button 
-                          onClick={() => analyzeViewpoint(selItem.src, selItem.id)}
-                          disabled={isAnalyzing}
-                          className="w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-30"
+                          onClick={handleGenerate}
+                          disabled={isGenerating}
+                          className="relative w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {isAnalyzing ? 'Analyzing...' : 'Analysis'}
+                          <span className={`block transition-opacity ${isGenerating ? 'opacity-0' : 'opacity-100'}`}>Generate</span>
+                          {isGenerating && (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <Loader2 size={18} className="animate-spin" />
+                            </span>
+                          )}
                         </button>
                       );
-                    })()}
-                    <p className="font-mono text-[9px] opacity-40 text-center mt-4 tracking-tighter">
-                      © CRETE CO.,LTD. 2026. ALL RIGHTS RESERVED.
-                    </p>
-                  </div>
+                    }
+                    return (
+                      <button 
+                        onClick={() => analyzeViewpoint(selItem.src, selItem.id)}
+                        disabled={isAnalyzing}
+                        className="w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-30"
+                      >
+                        {isAnalyzing ? 'Analyzing...' : 'Analysis'}
+                      </button>
+                    );
+                  })()}
+                  <p className="font-mono text-[9px] opacity-40 text-center mt-4 tracking-tighter">
+                    © CRETE CO.,LTD. 2026. ALL RIGHTS RESERVED.
+                  </p>
                 </div>
-              </aside>
-            </div>
+              </div>
+            </aside>
           </div>
         </div>
+      </div>
       </main>
     </div>
   );

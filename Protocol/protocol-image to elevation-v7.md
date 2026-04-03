@@ -1,4 +1,4 @@
-﻿# System Protocol: Image to Elevation-v7
+# System Protocol: Image to Elevation-v7
 ---
 # 1. GOAL (시스템 목표)
 - **결과물:** 단 한 장의 2D 이미지로부터 3DS 객체로 즉각 변환 가능한 오차율 0%의 정밀 건축물 5면 정사영 전개도(Front, Right, Left, Top, Back) 동시 출력.
