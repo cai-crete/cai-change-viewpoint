@@ -39,28 +39,28 @@ const determineScenario = (angleStr: string, altitude: number, lens: number) => 
   return '[Scenario A] Street View: Fujifilm GFX 100S + 23mm Tilt-Shift';
 };
 
-// [V18] Map 5-IVSP Angle to 2x4 T-Shape Horizontal Layout Slots
-// NEW T-Shape Layout: Row0=[_, TOP, _, _], Row1=[LEFT, FRONT, RIGHT, REAR]
+// V70/V71: Map 5-IVSP Angle to 3x3 Cross Layout Slots
+// NEW Cross Layout: Row0=[_,REAR,_], Row1=[LEFT,TOP,RIGHT], Row2=[_,FRONT,_]
 const getElevationSlot = (angle: string): { row: number; col: number; label: string }[] => {
-  if (angle === '06:00') return [{ row: 1, col: 1, label: 'FRONT' }];
-  if (angle === '12:00') return [{ row: 1, col: 3, label: 'REAR' }];
+  if (angle === '06:00') return [{ row: 2, col: 1, label: 'FRONT' }];
+  if (angle === '12:00') return [{ row: 0, col: 1, label: 'REAR' }];
   if (angle === '3:00')  return [{ row: 1, col: 2, label: 'RIGHT' }];
   if (angle === '09:00') return [{ row: 1, col: 0, label: 'LEFT' }];
-  // Corner angles → composite (both adjacent faces) MUST BE [Left-hand face, Right-hand face] order
-  if (angle === '04:30') return [{ row: 1, col: 1, label: 'FRONT' }, { row: 1, col: 2, label: 'RIGHT' }];
-  if (angle === '07:30') return [{ row: 1, col: 0, label: 'LEFT' },  { row: 1, col: 1, label: 'FRONT' }];
-  if (angle === '1:30')  return [{ row: 1, col: 2, label: 'RIGHT' }, { row: 1, col: 3, label: 'REAR' }];
-  if (angle === '10:30') return [{ row: 1, col: 3, label: 'REAR' },  { row: 1, col: 0, label: 'LEFT' }];
-  return [{ row: 1, col: 1, label: 'FRONT' }];
+  // Corner angles → composite (both adjacent faces)
+  if (angle === '1:30')  return [{ row: 0, col: 1, label: 'REAR' },  { row: 1, col: 2, label: 'RIGHT' }];
+  if (angle === '04:30') return [{ row: 1, col: 2, label: 'RIGHT' }, { row: 2, col: 1, label: 'FRONT' }];
+  if (angle === '07:30') return [{ row: 2, col: 1, label: 'FRONT' }, { row: 1, col: 0, label: 'LEFT' }];
+  if (angle === '10:30') return [{ row: 1, col: 0, label: 'LEFT' },  { row: 0, col: 1, label: 'REAR' }];
+  return [{ row: 2, col: 1, label: 'FRONT' }];
 };
 
-// [V18] Crop a single elevation cell from the 2x4 T-Shape Horizontal Layout sheet
+// V70: Crop a single elevation cell from the 3x3 Cross Layout sheet
 const cropElevationFromSheet = (sheetDataUrl: string, slot: { row: number; col: number; label: string }): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const cellW = Math.floor(img.width / 4);  // 4 columns
-      const cellH = Math.floor(img.height / 2); // 2 rows
+      const cellW = Math.floor(img.width / 3);
+      const cellH = Math.floor(img.height / 3);
       const canvas = document.createElement('canvas');
       canvas.width = cellW;
       canvas.height = cellH;
@@ -76,55 +76,78 @@ const cropElevationFromSheet = (sheetDataUrl: string, slot: { row: number; col: 
 
 
 // --- Site Plan Diagram Component ---
-const SitePlanDiagram = ({ angle, lens, isAnalyzing, analysisStep, visibleV0Index }: { 
-  angle: string, 
-  lens: number, 
-  isAnalyzing: boolean, 
-  analysisStep?: string, 
-  visibleV0Index?: number | null 
-}) => {
-  // Mapping clock-face strings to degrees
+const SitePlanDiagram = ({ angle, lens, sitePlanImage, isAnalyzing }: { angle: string, lens: number, sitePlanImage: string | null, isAnalyzing: boolean }) => {
+  // Map angle string to degrees (06:00 = 180deg, 12:00 = 0deg, etc.)
   const angleMap: Record<string, number> = {
     '12:00': 0, '1:30': 45, '3:00': 90, '04:30': 135,
     '06:00': 180, '07:30': 225, '09:00': 270, '10:30': 315
   };
-
+  
   const rotation = angleMap[angle] !== undefined ? angleMap[angle] : 180;
-  const radius = 90; // Circular orbit radius
+  const radius = 90; // SVG radius
   const cx = 100;
   const cy = 100;
-
-  // Calculate Camera Position on the orbit
+  
+  // Calculate camera position
   const rad = (rotation - 90) * (Math.PI / 180);
   const cameraX = cx + radius * Math.cos(rad);
   const cameraY = cy + radius * Math.sin(rad);
 
   return (
-    <div className="w-full aspect-square relative flex items-center justify-center overflow-hidden transition-colors duration-300">
-      {/* Central Building Representation */}
-      <div className="absolute w-[80%] h-[80%] flex items-center justify-center z-0">
-        <div className="relative w-[60%] h-[40%] bg-black dark:bg-white flex items-center justify-center z-0 overflow-hidden border border-white/50">
-          {/* Diagonal Pattern Overlay */}
-          <div className="absolute inset-0 opacity-50 bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,white_2px,white_4px)] dark:bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,black_2px,black_4px)]" />
-        </div>
+    <div className="w-full aspect-square bg-white dark:bg-black border border-black/10 dark:border-white/10 relative flex items-center justify-center overflow-hidden transition-colors duration-300">
+      {/* 80% Safety Box (Area for site plan) */}
+      <div className="absolute w-[80%] h-[80%] border border-dashed border-black/5 dark:border-white/5 flex items-center justify-center z-0">
+        {sitePlanImage ? (
+          <div className="relative w-full h-full flex items-center justify-center p-4">
+            <img src={sitePlanImage} alt="Site Plan" className="max-w-full max-h-full object-contain opacity-80" />
+            
+            {/* 4 Corners Coordinates (New Mapping: Front=Bottom, Back=Top) */}
+            <div className="absolute bottom-[13%] left-[10%] w-2 h-2 rounded-full bg-blue-500 shadow-sm border border-white dark:border-black" title="좌전 (Blue)" />
+            <div className="absolute bottom-[13%] right-[10%] w-2 h-2 rounded-full bg-red-500 shadow-sm border border-white dark:border-black" title="우전 (Red)" />
+            <div className="absolute top-[10%] left-[10%] w-2 h-2 rounded-full bg-yellow-400 shadow-sm border border-white dark:border-black" title="좌후 (Yellow)" />
+            <div className="absolute top-[10%] right-[10%] w-2 h-2 rounded-full bg-green-500 shadow-sm border border-white dark:border-black" title="우후 (Green)" />
+            
+            {/* Front Label (Relative 06:00 Anchor) */}
+            <div className="absolute bottom-1 left-1/2 -translate-x-1/2 font-mono text-[9px] font-bold tracking-[0.2em] uppercase opacity-40">Front (06:00)</div>
+          </div>
+        ) : (
+          <div className="relative w-[60%] h-[40%] border border-black dark:border-white flex flex-col items-center justify-center z-0 opacity-20">
+             {/* Fallback Rectangle Silhouette */}
+             <div className="text-[9px] font-mono uppercase tracking-widest mt-auto mb-1">Front</div>
+             {/* Fallback Corners (New Mapping) */}
+             <div className="absolute bottom-0 left-0 w-1.5 h-1.5 rounded-full bg-blue-500 -translate-x-1/2 translate-y-1/2" />
+             <div className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-red-500 translate-x-1/2 translate-y-1/2" />
+             <div className="absolute top-0 left-0 w-1.5 h-1.5 rounded-full bg-yellow-400 -translate-x-1/2 -translate-y-1/2" />
+             <div className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-green-500 translate-x-1/2 -translate-y-1/2" />
+          </div>
+        )}
       </div>
 
-      {/* Optical Orbit and Camera Tracker */}
+      {/* SVG Diagram Layer */}
       <svg viewBox="0 0 200 200" className="absolute inset-0 w-full h-full z-10 pointer-events-none">
-        {/* Orbit Path (Dashed Circle) */}
-        <circle
-          cx={cx} cy={cy} r={radius}
-          fill="none" stroke="currentColor" strokeWidth="1"
-          strokeDasharray="8 4"
-          className="text-black/30 dark:text-white/30"
+        {/* Orbit Path (Solid, 50% Opacity) */}
+        <circle 
+          cx={cx} cy={cy} r={radius} 
+          fill="none" stroke="currentColor" strokeWidth="0.5" 
+          className="text-black dark:text-white opacity-50"
         />
-
-        {/* Camera Visual Target (Dot) */}
+        
+        {/* Camera Pictogram (Pointing to center) */}
         <g transform={`translate(${cameraX}, ${cameraY}) rotate(${rotation})`}>
-          <circle cx="0" cy="0" r="4.0" fill="currentColor" className="text-black dark:text-white" />
+          {/* Simple Camera Icon (Scaled 1.2x) */}
+          <rect x="-7.2" y="-4.8" width="14.4" height="9.6" rx="1" fill="currentColor" className="text-black dark:text-white opacity-90" />
+          <circle cx="0" cy="0" r="3.0" fill="white" className="dark:fill-black" />
+          <path d="M-2.4 -7.2 L2.4 -7.2 L1.2 -4.8 L-1.2 -4.8 Z" fill="currentColor" className="text-black dark:text-white opacity-90" />
+          
+          {/* Lens Indicator (Variable length based on 'lens' value, Scaled 1.2x) */}
+          <path 
+            d={`M-3.6 4.8 L3.6 4.8 L${lens > 80 ? 4.8 : 3.6} ${lens > 80 ? 14.4 : (lens > 40 ? 9.6 : 7.2)} L${lens > 80 ? -4.8 : -3.6} ${lens > 80 ? 14.4 : (lens > 40 ? 9.6 : 7.2)} Z`} 
+            fill="currentColor" 
+            className="text-black dark:text-white opacity-90" 
+          />
         </g>
       </svg>
-      
+
       {/* Analyzing Overlay */}
       {isAnalyzing && (
         <div className="absolute inset-0 bg-white/80 dark:bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center z-30 transition-colors duration-300">
@@ -177,7 +200,7 @@ const dbLoad = async (): Promise<any> => {
 
 interface CanvasItem {
   id: string;
-  type: 'upload' | 'generated' | 'path'; // [V19] Added path support
+  type: 'upload' | 'generated';
   src: string;
   x: number;
   y: number;
@@ -186,19 +209,16 @@ interface CanvasItem {
   // V74: Metadata linking
   motherId: string | null;
   parameters: {
-    angleIndex?: number;
-    altitudeIndex?: number;
-    lensIndex?: number;
-    timeIndex?: number;
+    angleIndex: number;
+    altitudeIndex: number;
+    lensIndex: number;
+    timeIndex: number;
     analyzedOpticalParams?: any | null;
     elevationParams?: any | null;
     sitePlanImage?: string | null;
     architecturalSheetImage?: string | null;
     elevationImages?: Record<string, string> | null;
     bldgRatio?: { width: number; depth: number; height: number } | null;
-    // [V19] Path properties
-    points?: { x: number; y: number }[];
-    strokeWidth?: number;
   } | null;
 }
 
@@ -214,7 +234,7 @@ export default function App() {
   const isDraggingPanRef = useRef(false);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragStartRef = useRef({ x: 0, y: 0 });
-  const resizeStartRef = useRef<{ x: number, y: number, width: number, height: number, itemX: number, itemY: number, childPaths?: Record<string, any> }>({ x: 0, y: 0, width: 0, height: 0, itemX: 0, itemY: 0 });
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0, itemX: 0, itemY: 0 });
   const resizeCornerRef = useRef({ dx: 1, dy: 1 });
   // Keep State for render (cursor CSS)
   const [isDraggingItem, setIsDraggingItem] = useState(false);
@@ -240,6 +260,7 @@ export default function App() {
   
   // UI State
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [activeTab, setActiveTab] = useState<'create' | 'result'>('create');
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [sitePlanImage, setSitePlanImage] = useState<string | null>(null);
@@ -487,16 +508,7 @@ export default function App() {
             isResizingItemRef.current = true;
             setIsResizingItem(true);
             resizeCornerRef.current = { dx: corner.dx, dy: corner.dy };
-            
-            // [V19] Capture child paths for sync scaling
-            const childPaths: Record<string, any> = {};
-            canvasItems.forEach(ci => {
-              if (ci.motherId === item.id && ci.type === 'path' && ci.parameters?.points) {
-                childPaths[ci.id] = { ...ci, points: [...ci.parameters.points] };
-              }
-            });
-
-            resizeStartRef.current = { x: coords.x, y: coords.y, width: item.width, height: item.height, itemX: item.x, itemY: item.y, childPaths };
+            resizeStartRef.current = { x: coords.x, y: coords.y, width: item.width, height: item.height, itemX: item.x, itemY: item.y };
             e.currentTarget.setPointerCapture(e.pointerId);
             return;
           }
@@ -547,44 +559,23 @@ export default function App() {
       const dy = coords.y - resizeStartRef.current.y;
       const aspect = resizeStartRef.current.width / resizeStartRef.current.height;
 
-      // [V19] Calculate new width based on drag delta and corner position
-      const rawDeltaW = dx * resizeCornerRef.current.dx;
-      const newWidth = Math.max(resizeStartRef.current.width + rawDeltaW, 50);
-      const newHeight = newWidth / aspect;
-      const scaleRatio = newWidth / resizeStartRef.current.width;
-
-      // [V19] Calculate new position based on resizing corner
-      const newX = resizeCornerRef.current.dx === -1
-        ? resizeStartRef.current.itemX + (resizeStartRef.current.width - newWidth)
-        : resizeStartRef.current.itemX;
-      const newY = resizeCornerRef.current.dy === -1
-        ? resizeStartRef.current.itemY + (resizeStartRef.current.height - newHeight)
-        : resizeStartRef.current.itemY;
-
       setCanvasItems(prev => prev.map(item => {
-        if (item.id === selectedItemId) {
-          // Update the resized item
-          return { ...item, x: newX, y: newY, width: newWidth, height: newHeight };
-        } else if (item.motherId === selectedItemId && item.type === 'path' && resizeStartRef.current.childPaths?.[item.id]) {
-          // [V19] Sync associated sketch paths (scaling points and stroke width)
-          const original = resizeStartRef.current.childPaths[item.id];
-          const scaledRelX = (original.x - resizeStartRef.current.itemX) * scaleRatio;
-          const scaledRelY = (original.y - resizeStartRef.current.itemY) * scaleRatio;
-          
-          return { 
-            ...item, 
-            x: newX + scaledRelX, 
-            y: newY + scaledRelY, 
-            width: original.width * scaleRatio, 
-            height: original.height * scaleRatio,
-            parameters: {
-              ...item.parameters,
-              points: original.points.map((p: any) => ({ x: p.x * scaleRatio, y: p.y * scaleRatio })),
-              strokeWidth: (original.parameters?.strokeWidth || 4) * scaleRatio
-            }
-          };
-        }
-        return item;
+        if (item.id !== selectedItemId) return item;
+
+        // Width changes: right corner → expand right, left corner → expand left (flip sign)
+        const rawDeltaW = dx * resizeCornerRef.current.dx;
+        const newWidth = Math.max(resizeStartRef.current.width + rawDeltaW, 50);
+        const newHeight = newWidth / aspect;
+
+        // Position: left corners move x; top corners move y
+        const newX = resizeCornerRef.current.dx === -1
+          ? resizeStartRef.current.itemX + (resizeStartRef.current.width - newWidth)
+          : resizeStartRef.current.itemX;
+        const newY = resizeCornerRef.current.dy === -1
+          ? resizeStartRef.current.itemY + (resizeStartRef.current.height - newHeight)
+          : resizeStartRef.current.itemY;
+
+        return { ...item, x: newX, y: newY, width: newWidth, height: newHeight };
       }));
     }
   };
@@ -692,6 +683,7 @@ export default function App() {
           setCanvasItems(prev => [...prev, newItem]);
           setSelectedItemId(newItemId);
           setSitePlanImage(null);
+          setActiveTab('create');
 
         };
         img.src = base64Image;
@@ -739,17 +731,6 @@ export default function App() {
         - Follow the '5면 정사영 전개도 건축물 정보 작성 가이드라인' exactly.
         - For each of the 5 views (Front, Top, Right, Left, Rear), fill in BOTH Part A (Geometry) and Part B (Property) per the master template.
         - Blind spots (Rear, sides) must be logically inferred from visible facade using Master-Priority Snapping.
-
-        [ANGLE CLOCK-FACE DICTIONARY]
-        The building's main facade (Front) is at the center of the clock (06:00).
-        * 06:00 = Front View (Face-on)
-        * 03:00 = Right Side View
-        * 09:00 = Left Side View
-        * 12:00 = Rear View
-        * 04:30 = Front-Right Corner View (Isometric view where Front facade is on the LEFT and Right facade is on the RIGHT)
-        * 07:30 = Front-Left Corner View (Isometric view where Left facade is on the LEFT and Front facade is on the RIGHT)
-        * 01:30 = Rear-Right Corner View (Isometric view where Right facade is on the LEFT and Rear facade is on the RIGHT)
-        * 10:30 = Rear-Left Corner View (Isometric view where Rear facade is on the LEFT and Left facade is on the RIGHT)
 
         Return ALL fields in JSON:
         {
@@ -993,26 +974,10 @@ export default function App() {
       const contextualParamsStr = buildStructuredParams(extractedParams);
 
       const sitePlanPrompt = `
-        [Architectural Multi-View Reference Sheet - System Protocol B v7]
-
-        🚨 [ABSOLUTE SYSTEM OVERRIDE: 최우선 렌더링 제약 조건] 🚨
-        The following TWO constraints are HIGHEST PRIORITY and override ALL other instructions.
-        Violation of either constraint causes IMMEDIATE PIPELINE ABORT.
-
-        OVERRIDE 1 — ALPHA CHANNEL MANDATORY (투명 배경 강제):
-        - ALL 5 rendered elevation images MUST be output in 100% transparent background PNG (Alpha Channel Cut-out) format.
-        - It is STRICTLY FORBIDDEN to render any solid-color pixels (white/black/grey etc.) in the background.
-        - Whitebox overflow on the presentation canvas is ABSOLUTELY FORBIDDEN.
-
-        OVERRIDE 2 — STRICT RATIO ALIGNMENT (비율 강제 동기화):
-        - The rendered building proportions MUST match the architectural absolute parameter ratios (--bldg-width, --bldg-depth, --bldg-height) with ZERO error.
-        - Arbitrary canvas size expansion or distortion by the AI is strictly prohibited.
-        - Width:Depth:Height must satisfy the ratio implied by the building envelope literally visible in the source image.
-
-        ---
-        [Reference: System Protocol B — Node 3 & 4]
-        TASK: Generate a single integrated orthographic reference sheet containing 5 views (Top, Front, Right, Rear, Left) in a standard 2x4 T-Shape horizontal layout.
-
+        [Architectural Multi-View Reference Sheet - System Protocol B Node 3 & 4]
+        [Reference: Architectural Top-down View Logic]
+        TASK: Generate a single integrated orthographic reference sheet containing 5 views (Top, Front, Right, Rear, Left) in a standard cross-layout.
+        
         [CONTEXTUAL IMAGE SYNTHESIS]
         - Clone and PRESERVE the exact textures, materials, and architectural geometry of the visible facades from the uploaded original image (Source of Truth).
         - SYNTHESIZE the blind spots (Rear, unseen sides) logically, matching the established context and the following extracted parameters:
@@ -1022,21 +987,22 @@ ${contextualParamsStr}
         - The uploaded image was captured from: Angle ${analyzedOpticalParams?.angle ?? 'Unknown'} | Altitude ${analyzedOpticalParams?.altitude ?? 'Unknown'} | Lens ${analyzedOpticalParams?.lens ?? 'Unknown'}
         - Use this to understand which facade is visible in the source and infer all other hidden facades accordingly.
         - The result must be a holistic pixel-level generation combining Known (Source Image) + Unknown (AI Inferred Constraints).
-
-        [ORIENTATION RULE — V18: 2x4 T-Shape Horizontal Layout]
-        LAYOUT SPECIFICATION (2 Rows x 4 Columns Grid):
-        - Row 1: [Empty | TOP (Roof Plan) | Empty | Empty]
-        - Row 2: [LEFT Elevation | FRONT Elevation | RIGHT Elevation | REAR Elevation]
-
-        CRITICAL ALIGNMENT RULES:
-        - All 4 elevations in Row 2 must share an identical height (Z-axis height of the building).
-        - The TOP (Roof Plan) in Row 1 Col 2 must share the same width as the FRONT elevation below it.
-        - LEFT and RIGHT elevations in Row 2 have width equal to the building's depth.
-        - The layout represents a horizontal, unfolded orthographic projection (like an architectural drawing sheet).
-
+        
+        [ORIENTATION RULE]
+         LAYOUT SPECIFICATION (3x3 Grid):
+        - Row 1: [Empty | REAR Elevation | Empty]
+        - Row 2: [LEFT Elevation | TOP (Roof Plan) | RIGHT Elevation]
+        - Row 3: [Empty | FRONT Elevation | Empty]
+        
+        [ORIENTATION RULE]
+        - FRONT Elevation is at the BOTTOM (Row 3) of the layout.
+        - REAR Elevation is at the TOP (Row 1).
+        - The TOP (Roof Plan) occupies the center (Row 2, middle column), flanked by LEFT and RIGHT.
+        
         PROJECTION: True Orthographic (FOV=0), absolute zero perspective.
         STYLE: Realistic architectural elevation style matching the original rendering or photo's texture, NO perspective effects.
-        BACKGROUND: Pure Transparent Background (Optical Null Space) — ABSOLUTE SYSTEM OVERRIDE 1 applies.
+        BACKGROUND: Pure Transparent Background (Optical Null Space).
+        
         CONSTRAINTS: All views must be perfectly aligned at the vertices. NO 3D perspective, NO text, NO labels.
       `.trim();
 
@@ -1060,12 +1026,12 @@ ${contextualParamsStr}
             const fullSheetData = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
             setArchitecturalSheetImage(fullSheetData);
             
-            // [V18] Extract all 5 views from the 2x4 T-Shape Horizontal layout and store independently
-            // Layout: Row0=[_, TOP, _, _], Row1=[LEFT, FRONT, RIGHT, REAR]
+            // [V11] Extract all 5 views from the 3x3 cross layout and store independently
+            // Layout: Row0=[_,REAR,_], Row1=[LEFT,TOP,RIGHT], Row2=[_,FRONT,_]
             const img = new Image();
             img.onload = () => {
-              const cellW = img.width / 4;  // 4 columns
-              const cellH = img.height / 2; // 2 rows
+              const cellW = img.width / 3;
+              const cellH = img.height / 3;
 
               const cropCell = (col: number, row: number): string => {
                 const c = document.createElement('canvas');
@@ -1075,11 +1041,11 @@ ${contextualParamsStr}
                 return c.toDataURL();
               };
 
-              const topImg    = cropCell(1, 0); // Row 0, Col 1
-              const leftImg   = cropCell(0, 1); // Row 1, Col 0
-              const frontImg  = cropCell(1, 1); // Row 1, Col 1
-              const rightImg  = cropCell(2, 1); // Row 1, Col 2
-              const rearImg   = cropCell(3, 1); // Row 1, Col 3
+              const rearImg   = cropCell(1, 0);
+              const leftImg   = cropCell(0, 1);
+              const topImg    = cropCell(1, 1);
+              const rightImg  = cropCell(2, 1);
+              const frontImg  = cropCell(1, 2);
 
               setSitePlanImage(topImg);
 
@@ -1356,6 +1322,7 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                   return [...prev, newGenItem];
                 });
                 setSelectedItemId(newGenItem.id);
+                setActiveTab('result');
               };
               img.src = generatedSrc;
               
@@ -1652,17 +1619,13 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                                 <div style={{
                                   width: '100%', height: '100%',
                                   display: 'grid',
-                                  // [V18] 2x4 T-Shape: LEFT | FRONT | RIGHT | REAR with TOP floating above FRONT
-                                  gridTemplateColumns: `${D}fr ${W}fr ${D}fr ${W}fr`,
-                                  gridTemplateRows: `${D}fr ${H}fr`,
-                                  gridTemplateAreas: `'. top . .' 'left front right rear'`,
-                                  gap: 0,
-                                  // [V21] Defense Maximized: block any image from pushing the grid
-                                  minWidth: 0,
-                                  minHeight: 0,
+                                  gridTemplateColumns: `${D}fr ${W}fr ${D}fr`,
+                                  gridTemplateRows: `${D}fr ${H}fr ${H}fr`,
+                                  gridTemplateAreas: `'. rear .' 'left top right' '. front .'`,
+                                  gap: 0
                                 }}>
-                                  {(['top','left','front','right','rear'] as const).map(view => (
-                                    <div key={view} style={{ gridArea: view, overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+                                  {(['rear','left','top','right','front'] as const).map(view => (
+                                    <div key={view} style={{ gridArea: view, overflow: 'hidden' }}>
                                       {ei[view] && <img src={ei[view]} style={{ width:'100%', height:'100%', objectFit:'fill', display:'block' }} alt={view} />}
                                     </div>
                                   ))}
@@ -1737,18 +1700,28 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                 {/* Sidebar Content Wrapper */}
                 <div className={`flex flex-col h-full overflow-y-auto transition-opacity duration-200 ${isRightPanelOpen ? 'opacity-100 delay-150' : 'opacity-0'}`}>
                 
-                  {/* [V20] Sidebar Consolidated: Parameter View Only (Pagination Dots & Protocol DNA Removed) */}
-                  <div className="flex flex-col gap-5 p-5 pt-8 flex-1">
-                    <div>
-                      <div className="font-mono text-xs font-bold uppercase tracking-widest opacity-70 mb-3">
-                        Viewpoint
-                      </div>
-                      <SitePlanDiagram 
-                        angle={ANGLES[angleIndex]} 
-                        lens={LENSES[lensIndex].value} 
-                        isAnalyzing={isAnalyzing}
-                      />
-                    </div>
+                  {/* V81: Dots Navigation Top Bar */}
+                  <div className="flex justify-center items-center gap-2 pt-6 pb-2">
+                    <button 
+                      onClick={() => setActiveTab('create')}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${activeTab === 'create' ? 'bg-black dark:bg-white scale-125' : 'bg-black/20 dark:bg-white/20 hover:bg-black/40 dark:hover:bg-white/40'}`}
+                      title="Parameter View"
+                    />
+                    <button 
+                      onClick={() => setActiveTab('result')}
+                      className={`w-2 h-2 rounded-full transition-all duration-300 ${activeTab === 'result' ? 'bg-black dark:bg-white scale-125' : 'bg-black/20 dark:bg-white/20 hover:bg-black/40 dark:hover:bg-white/40'}`}
+                      title="Report View"
+                    />
+                  </div>
+                
+                {activeTab === 'create' ? (
+                  <div className="flex flex-col gap-5 p-5 flex-1">
+                    <SitePlanDiagram 
+                      angle={ANGLES[angleIndex]} 
+                      lens={LENSES[lensIndex].value} 
+                      sitePlanImage={sitePlanImage} 
+                      isAnalyzing={isAnalyzing}
+                    />
                     
                     <div className="flex flex-col mt-2 space-y-5">
                       {/* Controls */}
@@ -1764,65 +1737,117 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                           <span className="opacity-70 uppercase tracking-widest">Altitude</span>
                           <span className="font-bold">{ALTITUDES[altitudeIndex].label}</span>
                         </div>
-                        <input type="range" min="0" max={ALTITUDES.length - 1} step="1" value={altitudeIndex} onChange={(e) => setAltitudeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
+                        <input type="range" min="0" max={ALTITUDES.length-1} step="1" value={altitudeIndex} onChange={(e) => setAltitudeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
                       </div>
                       <div>
                         <div className="flex justify-between font-mono text-xs leading-normal tracking-wide mb-1.5">
                           <span className="opacity-70 uppercase tracking-widest">Lens</span>
                           <span className="font-bold">{LENSES[lensIndex].label}</span>
                         </div>
-                        <input type="range" min="0" max={LENSES.length - 1} step="1" value={lensIndex} onChange={(e) => setLensIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
+                        <input type="range" min="0" max={LENSES.length-1} step="1" value={lensIndex} onChange={(e) => setLensIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
                       </div>
                       <div>
                         <div className="flex justify-between font-mono text-xs leading-normal tracking-wide mb-1.5">
                           <span className="opacity-70 uppercase tracking-widest">Time</span>
                           <span className="font-bold">{TIMES[timeIndex]}</span>
                         </div>
-                        <input type="range" min="0" max={TIMES.length - 1} step="1" value={timeIndex} onChange={(e) => setTimeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
+                        <input type="range" min="0" max={TIMES.length-1} step="1" value={timeIndex} onChange={(e) => setTimeIndex(Number(e.target.value))} className="w-full accent-black dark:accent-white cursor-pointer" />
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <div className="flex flex-col gap-5 px-5 pb-5 flex-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <h3 className="text-xl font-display uppercase tracking-widest leading-none">Analysis Report</h3>
+                    </div>
+                    <div className="font-mono text-xs leading-normal tracking-widest space-y-4">
+                      <div>
+                        <span className="opacity-50 block mb-1">SCENARIO</span>
+                        <span>{determineScenario(ANGLES[angleIndex], ALTITUDES[altitudeIndex].value, LENSES[lensIndex].value)}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="opacity-50 block mb-1">ANGLE</span>
+                          <span>{ANGLES[angleIndex]}</span>
+                        </div>
+                        <div>
+                          <span className="opacity-50 block mb-1">ALTITUDE</span>
+                          <span>{ALTITUDES[altitudeIndex].label}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="opacity-50 block mb-1">PROMPT</span>
+                        <span className="leading-tight block">{prompt || 'Logical inference based on architectural DNA.'}</span>
+                      </div>
 
-                  {/* BOTTOM ACTION */}
-                  <div className="p-5 mt-auto border-t border-black/10 dark:border-white/10">
-                    {(() => {
-                      const selItem = canvasItems.find(i => i.id === selectedItemId);
-                      if (!selItem) return null;
-                      if (selItem.parameters?.analyzedOpticalParams || selItem.type === 'generated') {
-                        return (
-                          <button 
-                            onClick={handleGenerate}
-                            disabled={isGenerating}
-                            className="relative w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className={`block transition-opacity ${isGenerating ? 'opacity-0' : 'opacity-100'}`}>Generate</span>
-                            {isGenerating && (
-                              <span className="absolute inset-0 flex items-center justify-center">
-                                <Loader2 size={18} className="animate-spin" />
-                              </span>
-                            )}
-                          </button>
-                        );
-                      }
+                      {/* V80: PHASE 3 Detailed Parameters Rendering */}
+                      {elevationParams && typeof elevationParams === 'object' && (
+                        <div className="mt-6 border-t border-black/10 dark:border-white/10 pt-4 space-y-4">
+                          <span className="opacity-50 block font-display uppercase tracking-widest text-xs">PHASE 3: Protocol DNA</span>
+                          <div className="space-y-3">
+                            {Object.entries(elevationParams).map(([groupKey, groupVal]: [string, any]) => {
+                              if (typeof groupVal !== 'object' || groupVal === null) return null;
+                              return (
+                                <div key={groupKey} className="text-[10px]">
+                                  <span className="opacity-50 block uppercase mb-1">{groupKey.replace(/^[0-9]+_/, '').replace(/_/g, ' ')}</span>
+                                  <div className="pl-2 border-l border-black/20 dark:border-white/20 space-y-1">
+                                    {Object.entries(groupVal).map(([key, val]) => (
+                                      <div key={key} className="flex justify-between items-start gap-2">
+                                        <span className="opacity-60 capitalize whitespace-nowrap">{key.replace(/_/g, ' ')}</span>
+                                        <span className="text-right truncate flex-1">{String(val)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* BOTTOM ACTION */}
+                <div className="p-5 mt-auto border-t border-black/10 dark:border-white/10">
+                  {(() => {
+                    const selItem = canvasItems.find(i => i.id === selectedItemId);
+                    if (!selItem) return null;
+                    if (selItem.parameters?.analyzedOpticalParams || selItem.type === 'generated') {
                       return (
                         <button 
-                          onClick={() => analyzeViewpoint(selItem.src, selItem.id)}
-                          disabled={isAnalyzing}
-                          className="w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-30"
+                          onClick={handleGenerate}
+                          disabled={isGenerating}
+                          className="relative w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {isAnalyzing ? 'Analyzing...' : 'Analysis'}
+                          <span className={`block transition-opacity ${isGenerating ? 'opacity-0' : 'opacity-100'}`}>Generate</span>
+                          {isGenerating && (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <Loader2 size={18} className="animate-spin" />
+                            </span>
+                          )}
                         </button>
                       );
-                    })()}
-                    <p className="font-mono text-[9px] opacity-40 text-center mt-4 tracking-tighter">
-                      © CRETE CO.,LTD. 2026. ALL RIGHTS RESERVED.
-                    </p>
-                  </div>
+                    }
+                    return (
+                      <button 
+                        onClick={() => analyzeViewpoint(selItem.src, selItem.id)}
+                        disabled={isAnalyzing}
+                        className="w-full border border-black dark:border-white py-2 font-display tracking-widest uppercase hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all disabled:opacity-30"
+                      >
+                        {isAnalyzing ? 'Analyzing...' : 'Analysis'}
+                      </button>
+                    );
+                  })()}
+                  <p className="font-mono text-[9px] opacity-40 text-center mt-4 tracking-tighter">
+                    © CRETE CO.,LTD. 2026. ALL RIGHTS RESERVED.
+                  </p>
                 </div>
-              </aside>
-            </div>
+              </div>
+            </aside>
           </div>
         </div>
+      </div>
       </main>
     </div>
   );
