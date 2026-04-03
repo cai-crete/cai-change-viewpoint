@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Moon, Sun, Loader2, Search, Hand, MousePointer2, Compass, Book, Wand2, Sparkles, Trash2, Undo, Download } from 'lucide-react';
+import { Upload, Moon, Sun, Loader2, Search, Hand, MousePointer2, Compass, Book, Wand2, Sparkles, Trash2, Undo, Download, RotateCcw } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { ANALYSIS, IMAGE_GEN, ANALYSIS_FALLBACK, IMAGE_GEN_FALLBACK } from './constants';
 
@@ -1543,6 +1543,23 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
+                      {item.type === 'upload' && (
+                        /* V32: Re-analyze button for uploaded images only */
+                        <button 
+                          onClick={() => analyzeViewpoint(item.src, item.id)}
+                          disabled={isAnalyzing}
+                          className={`flex items-center justify-center transition-colors rounded-l-2xl ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+                          style={{ width: `${40 / (canvasZoom / 100)}px`, height: '100%' }}
+                          title="재분석"
+                        >
+                          {isAnalyzing ? (
+                            <Loader2 className="animate-spin" size={14 / (canvasZoom / 100)} />
+                          ) : (
+                            <RotateCcw size={14 / (canvasZoom / 100)} />
+                          )}
+                        </button>
+                      )}
+                      
                       {item.type === 'generated' && (
                         /* V82: Add Download button for generated images */
                         <a 
@@ -1557,7 +1574,7 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                       )}
                       <button 
                         onClick={() => setOpenLibraryItemId(prev => prev === item.id ? null : item.id)}
-                        className={`flex items-center justify-center transition-colors ${item.type !== 'generated' ? 'rounded-l-2xl' : ''} ${openLibraryItemId === item.id ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
+                        className={`flex items-center justify-center transition-colors ${item.type !== 'generated' && item.type !== 'upload' ? 'rounded-l-2xl' : ''} ${openLibraryItemId === item.id ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}
                         style={{ width: `${40 / (canvasZoom / 100)}px`, height: '100%' }}
                         title="라이브러리 (아트보드)"
                       >
