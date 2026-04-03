@@ -1602,8 +1602,8 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                           {/* [V11] 5-Panel Orthographic Grid Artboard - UNFOLDED BOX Protocol v7 */}
                           {item.parameters?.elevationImages ? (() => {
                             const ei = item.parameters.elevationImages as any;
-                            const r = (item.parameters as any).bldgRatio || { width: 10, depth: 8, height: 15 };
-                            const W = r.width, D = r.depth, H = r.height;
+                            // [V31] 규격화: 모든 유닛 크기를 W:12, D:12, H:15로 고정 적용
+                            const W = 12, D = 12, H = 15;
                             
                             // [V28/V29] 통합 개선: 가용 영역 확장 (1500x1100) 및 간격 축소 (12px)
                             const gapTotal = 24; // 12px * 2 gaps
