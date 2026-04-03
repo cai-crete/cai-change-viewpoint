@@ -54,19 +54,43 @@ const getElevationSlot = (angle: string): { row: number; col: number; label: str
   return [{ row: 1, col: 1, label: 'FRONT' }];
 };
 
-// [V18] Crop a single elevation cell from the 2x4 T-Shape Horizontal Layout sheet
-const cropElevationFromSheet = (sheetDataUrl: string, slot: { row: number; col: number; label: string }): Promise<string> => {
+// [V18/V23] Crop a single elevation cell from the 2x4 T-Shape sheet using proportional bldgRatio
+const cropElevationFromSheet = (
+  sheetDataUrl: string, 
+  slot: { row: number; col: number; label?: string },
+  bldgRatio: { width: number; depth: number; height: number }
+): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const cellW = Math.floor(img.width / 4);  // 4 columns
-      const cellH = Math.floor(img.height / 2); // 2 rows
+      const W = bldgRatio.width || 10;
+      const D = bldgRatio.depth || 10;
+      const H = bldgRatio.height || 10;
+
+      const totalW = (D * 2) + (W * 2);
+      const totalH = D + H;
+
+      const unitX = img.width / totalW;
+      const unitY = img.height / totalH;
+
+      let startX = 0;
+      if (slot.col > 0) startX += D * unitX;
+      if (slot.col > 1) startX += W * unitX;
+      if (slot.col > 2) startX += D * unitX;
+
+      let startY = 0;
+      if (slot.row > 0) startY += D * unitY;
+
+      const cellW = (slot.col % 2 === 0) ? (D * unitX) : (W * unitX);
+      const cellH = (slot.row === 0) ? (D * unitY) : (H * unitY);
+
       const canvas = document.createElement('canvas');
-      canvas.width = cellW;
-      canvas.height = cellH;
+      canvas.width = Math.max(1, Math.floor(cellW));
+      canvas.height = Math.max(1, Math.floor(cellH));
       const ctx = canvas.getContext('2d');
       if (!ctx) { reject(new Error('Canvas context unavailable')); return; }
-      ctx.drawImage(img, slot.col * cellW, slot.row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+      
+      ctx.drawImage(img, Math.floor(startX), Math.floor(startY), Math.floor(cellW), Math.floor(cellH), 0, 0, canvas.width, canvas.height);
       resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = reject;
@@ -1060,18 +1084,39 @@ ${contextualParamsStr}
             const fullSheetData = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
             setArchitecturalSheetImage(fullSheetData);
             
-            // [V18] Extract all 5 views from the 2x4 T-Shape Horizontal layout and store independently
+            // [V18/V23] Extract all 5 views from the 2x4 T-Shape layout accurately using bldgRatio
             // Layout: Row0=[_, TOP, _, _], Row1=[LEFT, FRONT, RIGHT, REAR]
             const img = new Image();
             img.onload = () => {
-              const cellW = img.width / 4;  // 4 columns
-              const cellH = img.height / 2; // 2 rows
+              const sourceItem = canvasItems.find(i => i.id === itemId);
+              const bldgRatio = (sourceItem?.parameters as any)?.bldgRatio || { width: 10, depth: 10, height: 10 };
+              const W = Number(bldgRatio.width) || 10;
+              const D = Number(bldgRatio.depth) || 10;
+              const H = Number(bldgRatio.height) || 10;
+
+              const totalW = (D * 2) + (W * 2);
+              const totalH = D + H;
+
+              const unitX = img.width / totalW;
+              const unitY = img.height / totalH;
 
               const cropCell = (col: number, row: number): string => {
+                let startX = 0;
+                if (col > 0) startX += D * unitX;
+                if (col > 1) startX += W * unitX;
+                if (col > 2) startX += D * unitX;
+
+                let startY = 0;
+                if (row > 0) startY += D * unitY;
+
+                const cW = (col % 2 === 0) ? (D * unitX) : (W * unitX);
+                const cH = (row === 0) ? (D * unitY) : (H * unitY);
+
                 const c = document.createElement('canvas');
-                c.width = cellW; c.height = cellH;
+                c.width = Math.max(1, Math.floor(cW)); 
+                c.height = Math.max(1, Math.floor(cH));
                 const cx = c.getContext('2d');
-                if (cx) cx.drawImage(img, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+                if (cx) cx.drawImage(img, Math.floor(startX), Math.floor(startY), Math.floor(cW), Math.floor(cH), 0, 0, c.width, c.height);
                 return c.toDataURL();
               };
 
@@ -1272,18 +1317,19 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
           { inlineData: { data: base64Data, mimeType: mimeType } },
         ];
 
-        // V70/V71: Crop matching elevation slots and inject all
+        // V70/V71/V23: Crop matching elevation slots with bldgRatio proportionality
         // Corner angles inject two adjacent faces as separate images
         if (architecturalSheetImage) {
           const slots = getElevationSlot(currentAngle);
           for (const slot of slots) {
             try {
-              const croppedElevation = await cropElevationFromSheet(architecturalSheetImage, slot);
+              const bldgRatio = (sourceItem.parameters as any)?.bldgRatio || { width: 10, depth: 10, height: 10 };
+              const croppedElevation = await cropElevationFromSheet(architecturalSheetImage, slot, bldgRatio);
               const cropBase64 = croppedElevation.split(',')[1];
               parts.push({ inlineData: { data: cropBase64, mimeType: 'image/png' } });
-              console.log(`[V70] Injecting cropped elevation: ${slot.label} (Row${slot.row}, Col${slot.col})`);
+              console.log(`[V70] Injecting cropped elevation: Row${slot.row}, Col${slot.col}`);
             } catch (e) {
-              console.warn('[V70] Elevation crop failed:', slot.label, e);
+              console.warn('[V70] Elevation crop failed:', slot, e);
             }
           }
         }
