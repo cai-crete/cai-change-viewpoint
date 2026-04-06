@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(\"d:/OneDrive/바탕 화면/CRETE/cai-change-viewpoint/작업지시서/V34.md\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3003/)",
+      "Bash(cp -r \"d:/OneDrive/바탕 화면/CRETE/cai-change-viewpoint/src\" \"d:/OneDrive/바탕 화면/CRETE/cai-change-viewpoint/backup_2026-04-05_v37_pre_v38/src\")",
+      "Bash(cp -r \"d:/OneDrive/바탕 화면/CRETE/cai-change-viewpoint/작업지시서\" \"d:/OneDrive/바탕 화면/CRETE/cai-change-viewpoint/backup_2026-04-05_v37_pre_v38/작업지시서\")",
+      "Bash(cp -r src backup_2026-04-05_v37_pre_v38/)",
+      "Bash(cp package.json index.html vite.config.ts tsconfig.json vercel.json package-lock.json backup_2026-04-05_v37_pre_v38/)",
+      "Bash(cp -r 작업지시서 backup_2026-04-05_v37_pre_v38/)",
+      "Bash(\"d:/OneDrive/바탕 화면/CRETE/cai-change-viewpoint/작업지시서/V38.md\":*)",
+      "Bash(\"d:/OneDrive/바탕 화면/CRETE/cai-change-viewpoint/작업지시서/V39.md\":*)"
+    ]
+  }
+}

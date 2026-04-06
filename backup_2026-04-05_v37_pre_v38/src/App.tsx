@@ -177,7 +177,6 @@ interface CanvasItem {
     architecturalSheetImage?: string | null;
     elevationImages?: Record<string, string> | null;
     bldgRatio?: { width: number; depth: number; height: number } | null;
-    macroAEPL?: Record<string, string> | null; // [V41] Macro-AEPL 도시 맥락 파라미터
   } | null;
 }
 
@@ -208,7 +207,6 @@ export default function App() {
   const [lensIndex, setLensIndex] = useState<number>(0); // 23mm
   const [timeIndex, setTimeIndex] = useState<number>(2); // 12:00
   const [elevationParams, setElevationParams] = useState<any>(null);
-  const [macroAEPL, setMacroAEPL] = useState<any>(null); // [V41] Macro-AEPL 도시 맥락
   
   // Analyzed (Read-only) Parameters for UI Display
   const [analyzedOpticalParams, setAnalyzedOpticalParams] = useState<{
@@ -283,7 +281,6 @@ export default function App() {
       setTimeIndex(item.parameters.timeIndex);
       setAnalyzedOpticalParams(item.parameters.analyzedOpticalParams || null);
       setElevationParams(item.parameters.elevationParams || null);
-      setMacroAEPL(item.parameters.macroAEPL || null); // [V41]
       setSitePlanImage(item.parameters.sitePlanImage || null);
       setArchitecturalSheetImage(item.parameters.architecturalSheetImage || null);
     }
@@ -814,17 +811,6 @@ Return ALL fields as valid JSON:
     "width": 10,
     "depth": 8,
     "height": 15
-  },
-  "macro_aepl": {
-    "E_road_width": "전면 도로 폭원 및 차선 수 (예: 6차선 약 22m)",
-    "E_mass_scale": "인접 건물 층수/볼륨 (예: 좌측 5층, 우측 8층 RC조)",
-    "E_skyline_contour": "가로 전체 연속 지붕선 (예: 코니스 라인 EL+18m 일정)",
-    "E_intersection_layout": "교차로 형태 (예: T자형 신호교차로, 4방향)",
-    "E_setback_distance": "인접 건물 이격 거리 (예: 좌측 4m, 우측 2m)",
-    "S_paving_material": "바닥 포장재 유형 (예: 아스팔트 도로, 화강석 보도블록)",
-    "S_vegetation_type": "가로수 및 식생 (예: 은행나무 8m 간격, 수관 직경 4m)",
-    "M_atmospheric_optics": "대기 광학 상태 (예: 맑음, 빛 산란 낮음, GI 반사 중간)",
-    "M_dynamic_agents": "동적 요소 (예: 차량 밀도 중간, 보행자 산발적, 모션 블러 약함)"
   }
 }
 \`\`\`
@@ -908,27 +894,13 @@ Return ALL fields as valid JSON:
           analyzedOpticalParams: analyzedOpt,
           elevationParams: data.elevation_parameters || null,
           bldgRatio: data.bldg_ratio || null,  // [V11] numeric proportions for artboard grid
-          macroAEPL: data.macro_aepl || null,  // [V41] Macro-AEPL 도시 맥락 파라미터
           sitePlanImage: null,
           architecturalSheetImage: null
         };
 
-        setCanvasItems(prev => prev.map(item => {
-          if (item.id === itemId) return { ...item, parameters: newParams };
-          // [V39] 모체 재분석 시 파생 아이템의 geometry/property 필드 동기화
-          if (item.motherId === itemId && item.parameters) {
-            return {
-              ...item,
-              parameters: {
-                ...item.parameters,
-                bldgRatio: newParams.bldgRatio,
-                elevationParams: newParams.elevationParams,
-                macroAEPL: newParams.macroAEPL, // [V41] Macro-AEPL 도시 맥락 동기화
-              }
-            };
-          }
-          return item;
-        }));
+        setCanvasItems(prev => prev.map(item => 
+          item.id === itemId ? { ...item, parameters: newParams } : item
+        ));
         
         // After parameter analysis, trigger site plan generation with extracted params for synthesis
         // Forward the entire elevation_views as the structured elevation parameters
@@ -1030,14 +1002,14 @@ ${buildPanelAEPL(panel.view)}
 
       if (itemId) {
         setCanvasItems(prev => prev.map(item => {
-          // [V39] 모체 + 모체를 참조하는 파생 아이템 모두 elevationImages 동기화
-          if ((item.id === itemId || item.motherId === itemId) && item.parameters) {
+          if (item.id === itemId && item.parameters) {
             return {
               ...item,
               parameters: {
                 ...item.parameters,
                 sitePlanImage: elevationImages['top'],
                 elevationImages,
+                // [V16 Fix] bldgRatio preserved from Phase 1; architecturalSheetImage no longer needed (V37)
               }
             };
           }
@@ -1082,12 +1054,6 @@ ${buildPanelAEPL(panel.view)}
       const v0_altitude = analyzedOpticalParams?.altitude || 'Unknown';
       const v0_lens     = analyzedOpticalParams?.lens     || 'Unknown';
       const v0_time     = analyzedOpticalParams?.time     || 'Unknown';
-      
-      // [V41] Macro-AEPL 도시 맥락 파라미터 추출
-      const trueSource = (sourceItem.type === 'generated' && sourceItem.motherId)
-        ? canvasItems.find(i => i.id === sourceItem.motherId)
-        : sourceItem;
-      const macroAEPL = trueSource?.parameters?.macroAEPL as Record<string, string> | undefined;
 
       const layerB_viewpoint = `
 # ACTION PROTOCOL (MANDATORY EXECUTION WORKFLOW)
@@ -1139,18 +1105,7 @@ Source: 5-View Elevation Schema / Front Elevation MASTER
     "B4_Illumination": "${esc(frontView['2_Property_SLAVE']?.['B-4_Illumination_Shadows']?.Shadow_Intensity)}"
   }
 }
-\`\`\`
-
-## Step 5-B: Urban Context Parameters — Macro-AEPL (Layer C)
-${macroAEPL
-  ? `\`\`\`json\n${JSON.stringify(macroAEPL, null, 2)}\n\`\`\``
-  : 'Macro-AEPL not available — infer urban context from IMAGE 1 using continuity rules (Steps 6–8).'}
-Apply these urban parameters when reconstructing the surrounding environment at V₁:
-- E_road_width / E_intersection_layout: define road geometry in foreground.
-- E_mass_scale / E_setback_distance / E_skyline_contour: define adjacent building masses and background.
-- S_paving_material / S_vegetation_type: define ground surface and street trees.
-- M_atmospheric_optics: global lighting and haze.
-- M_dynamic_agents: moving vehicles and pedestrians.`
+\`\`\``
         : '';
 
       // [V15] v4: Virtual Photography — NO Blind Spot Inference. Replace with Scene Capture Execution.
@@ -1161,24 +1116,7 @@ Apply these urban parameters when reconstructing the surrounding environment at 
 - Elevation Data Sync: Load PHASE 2 pre-computed elevation(s) as permanent immutable geometry. DO NOT add, remove, or modify any architectural element.
 - Geometric Sanctuary: The building's proportions, openings, and surface texture are 100% locked to the elevation reference data.
 - Material Injection: Lock original textures from IMAGE 1. Apply Relighting ONLY for time of day (${currentTime}). Do not invent new materials.
-- PROHIBITION: Generating service doors, MEP pipes, ventilation grilles, or any details NOT present in the provided elevation data is STRICTLY FORBIDDEN.
-
-## Step 6: Dynamic Urban Context Synchronization (Macro-AEPL — MANDATORY)
-The camera has moved from V₀ (${v0_angle}) to V₁ (${currentAngle}). The surrounding urban environment MUST rotate and transform to match the new camera position:
-- Recalculate which urban elements (roads, adjacent buildings, landscape, sky) appear in the foreground and background at V₁.
-- Adjacent building masses that were off-screen at V₀ may now enter the frame at V₁ — render them at the correct scale and depth position.
-- Urban elements that were in front of the camera at V₀ but are now behind the camera at V₁ MUST be removed from the frame.
-- DO NOT carry over the V₀ background/foreground into the V₁ render. The entire scene context must be re-derived from the new camera position.
-
-## Step 7: Road & Pathway Continuity
-- The road axis and street trees visible in IMAGE 1 must be re-projected for the V₁ camera angle, extending toward the correct vanishing point(s).
-- Street furniture (traffic lights, streetlamps, bus shelters) follows the extended road grid at regular intervals matching IMAGE 1.
-- The road perspective in the output MUST correspond to V₁, not V₀.
-
-## Step 8: Skyline & Background Completion
-- Fill the background with adjacent building masses whose cornice lines are consistent with the subject building's urban context.
-- Buildings farther from the camera: reduce surface detail and apply atmospheric haze proportional to depth.
-- The skyline must form a physically continuous urban fabric consistent with the block geometry observed in IMAGE 1.`;
+- PROHIBITION: Generating service doors, MEP pipes, ventilation grilles, or any details NOT present in the provided elevation data is STRICTLY FORBIDDEN.`;
 
 
       const elevationSlots = getElevationSlot(currentAngle);
@@ -1255,11 +1193,8 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
           { inlineData: { data: base64Data, mimeType: mimeType } },
         ];
 
-        // [V39] 파생 아이템인 경우 모체의 elevationImages를 우선 사용 (single source of truth)
-        const trueSource = (sourceItem.type === 'generated' && sourceItem.motherId)
-          ? canvasItems.find(i => i.id === sourceItem.motherId)
-          : sourceItem;
-        const elevImgs = trueSource?.parameters?.elevationImages as Record<string, string> | undefined;
+        // [V37] elevationImages에서 직접 주입 (architecturalSheetImage 크롭 방식 폐기)
+        const elevImgs = sourceItem.parameters?.elevationImages as Record<string, string> | undefined;
         if (elevImgs) {
           const slots = getElevationSlot(currentAngle);
           for (const slot of slots) {
@@ -1307,7 +1242,6 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                     elevationParams: elevationParams,
                     elevationImages: sourceItem.parameters?.elevationImages, // [V16] Inherit to child
                     bldgRatio: sourceItem.parameters?.bldgRatio,           // [V16] Inherit to child
-                    macroAEPL: sourceItem.parameters?.macroAEPL,           // [V41] Inherit to child
                     sitePlanImage: sitePlanImage,
                     architecturalSheetImage: architecturalSheetImage
                   }
@@ -1670,13 +1604,8 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                           </div>
 
                           {/* [V11] 5-Panel Orthographic Grid Artboard - UNFOLDED BOX Protocol v7 */}
-                          {(() => {
-                            // [V39] 파생 아이템은 모체의 elevationImages 참조 (single source of truth)
-                            const resolvedElevImgs = (item.type === 'generated' && item.motherId)
-                              ? canvasItems.find(i => i.id === item.motherId)?.parameters?.elevationImages
-                              : item.parameters?.elevationImages;
-                            return resolvedElevImgs ? (() => {
-                            const ei = resolvedElevImgs as any;
+                          {item.parameters?.elevationImages ? (() => {
+                            const ei = item.parameters.elevationImages as any;
                             // [V33] W, D, H, gapTotal, SCALE은 외부 IIFE(bldgRatio 기반)에서 상속
 
                             // Grid Areas:
@@ -1734,7 +1663,7 @@ ${prompt ? `\nAdditional instruction: ${prompt}` : ''}
                                     <div className="w-full h-full flex items-center justify-center text-center p-4">
                                       <p className="font-mono opacity-40 uppercase tracking-widest" style={{ fontSize: `${14 / (canvasZoom / 100)}px`}}>No Architectural Sheet Generated</p>
                                     </div>
-                                )})()}
+                                )}
                         </div>
                         </div>
                       </div>
